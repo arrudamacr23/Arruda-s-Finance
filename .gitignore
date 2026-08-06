@@ -1,0 +1,13 @@
+#Arquivos de ambiente
+.env
+.env.*
+
+#Configurações do VS Code
+.vscode/
+
+#Logs
+*.log
+
+#Arquivos do sistema
+.DS_Store
+Thumbs.db
