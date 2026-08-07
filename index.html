@@ -44,13 +44,60 @@
     </div>
     <div class="header-right">
       <span class="header-user-email" id="header-user-email"></span>
+      <button class="btn-back" id="btn-perfil">👤 Perfil</button>
       <button class="btn-back" id="btn-logout">Sair</button>
     </div>
   </header>
 
-  <div class="tab-bar" id="tab-bar"></div>
+  <!-- View: Dívidas -->
+  <div id="view-dividas">
+    <div class="tab-bar" id="tab-bar"></div>
+    <div id="app-content"></div>
+  </div>
 
-  <div id="app-content"></div>
+  <!-- View: Perfil -->
+  <div id="view-perfil" style="display:none;">
+    <div class="dashboard-header">
+      <div>
+        <h2 class="dashboard-title">Meu Perfil</h2>
+        <div class="dashboard-badge">Dados pessoais e financeiros</div>
+      </div>
+      <div class="dashboard-actions">
+        <button class="btn-back" id="btn-voltar-dividas">← Voltar para Dívidas</button>
+      </div>
+    </div>
+
+    <div class="perfil-grid">
+      <div class="perfil-card perfil-foto-card">
+        <div class="perfil-avatar-wrap">
+          <img id="perfil-avatar-preview" class="perfil-avatar" src="" alt="" />
+          <div class="perfil-avatar-placeholder" id="perfil-avatar-placeholder">👤</div>
+          <button class="perfil-avatar-btn" id="btn-trocar-foto" title="Alterar foto">📷</button>
+        </div>
+        <input type="file" id="input-foto-perfil" accept="image/*" style="display:none;" />
+        <div class="perfil-email" id="perfil-email-label"></div>
+      </div>
+
+      <div class="perfil-card perfil-form-card">
+        <label class="modal-label">Telefone</label>
+        <input type="tel" id="input-perfil-telefone" class="modal-input" placeholder="(00) 00000-0000" />
+
+        <label class="modal-label">Profissão</label>
+        <select id="select-perfil-profissao" class="modal-input"></select>
+        <input type="text" id="input-perfil-profissao-outra" class="modal-input" placeholder="Digite sua profissão" style="display:none; margin-top:10px;" />
+
+        <label class="modal-label">Salário fixo mensal (R$)</label>
+        <input type="number" id="input-perfil-salario" class="modal-input" placeholder="Ex: 3000" min="0" step="0.01" />
+
+        <button class="btn-primary perfil-salvar-btn" id="btn-salvar-perfil">Salvar Perfil</button>
+      </div>
+    </div>
+
+    <div class="progress-section" id="perfil-resumo-section" style="display:none;">
+      <div class="section-title">Resumo Financeiro</div>
+      <div class="stats-grid" id="perfil-resumo-stats"></div>
+    </div>
+  </div>
 
 </div>
 
@@ -62,11 +109,30 @@
     <label class="modal-label">Título da dívida</label>
     <input type="text" id="input-titulo" class="modal-input" placeholder="Ex: Financiamento do Carro" />
 
-    <label class="modal-label">Valor de cada parcela (R$)</label>
-    <input type="number" id="input-valor" class="modal-input" placeholder="Ex: 350" min="0" step="0.01" />
+    <div class="modo-divida-toggle">
+      <button type="button" class="modo-divida-btn active" id="btn-modo-meses" data-modo="meses">Por qtd. de meses</button>
+      <button type="button" class="modo-divida-btn" id="btn-modo-total" data-modo="total">Por valor total</button>
+    </div>
 
-    <label class="modal-label">Quantidade de meses</label>
-    <input type="number" id="input-meses" class="modal-input" placeholder="Ex: 12" min="1" step="1" />
+    <!-- Modo: quantidade de meses (informa valor da parcela + nº de meses) -->
+    <div id="bloco-modo-meses">
+      <label class="modal-label">Valor de cada parcela (R$)</label>
+      <input type="number" id="input-valor" class="modal-input" placeholder="Ex: 350" min="0" step="0.01" />
+
+      <label class="modal-label">Quantidade de meses</label>
+      <input type="number" id="input-meses" class="modal-input" placeholder="Ex: 12" min="1" step="1" />
+    </div>
+
+    <!-- Modo: valor total (informa valor total da dívida + valor que consegue pagar por mês) -->
+    <div id="bloco-modo-total" style="display:none;">
+      <label class="modal-label">Valor total da dívida (R$)</label>
+      <input type="number" id="input-valor-total" class="modal-input" placeholder="Ex: 3000" min="0" step="0.01" />
+
+      <label class="modal-label">Quanto pretende pagar por mês (R$)</label>
+      <input type="number" id="input-valor-mensal" class="modal-input" placeholder="Ex: 400" min="0" step="0.01" />
+
+      <div class="modo-total-preview" id="modo-total-preview"></div>
+    </div>
 
     <div class="modal-row">
       <div class="modal-col">
@@ -97,7 +163,55 @@
 
     <div class="modal-actions">
       <button class="btn-secondary" id="btn-cancelar-edit-parcela">Cancelar</button>
+      <button class="btn-danger" id="btn-excluir-parcela">Excluir Parcela</button>
       <button class="btn-primary" id="btn-salvar-edit-parcela">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: adicionar parcela extra -->
+<div class="modal-overlay" id="add-parcela-overlay">
+  <div class="modal">
+    <div class="modal-title">Adicionar Parcela</div>
+    <div class="edit-parcela-info" id="add-parcela-info"></div>
+
+    <div class="modal-row">
+      <div class="modal-col">
+        <label class="modal-label">Mês</label>
+        <select id="input-add-mes" class="modal-input"></select>
+      </div>
+      <div class="modal-col">
+        <label class="modal-label">Ano</label>
+        <input type="number" id="input-add-ano" class="modal-input" step="1" />
+      </div>
+    </div>
+
+    <label class="modal-label">Valor da parcela (R$)</label>
+    <input type="number" id="input-add-valor" class="modal-input" placeholder="Ex: 200" min="0" step="0.01" />
+
+    <label class="modal-check-row">
+      <input type="checkbox" id="input-add-paga" />
+      <span>Já marcar como paga</span>
+    </label>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" id="btn-cancelar-add-parcela">Cancelar</button>
+      <button class="btn-primary" id="btn-salvar-add-parcela">Adicionar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: editar título da dívida -->
+<div class="modal-overlay" id="edit-titulo-overlay">
+  <div class="modal">
+    <div class="modal-title">Editar Dívida</div>
+
+    <label class="modal-label">Título da dívida</label>
+    <input type="text" id="input-edit-titulo" class="modal-input" placeholder="Ex: Financiamento do Carro" />
+
+    <div class="modal-actions">
+      <button class="btn-secondary" id="btn-cancelar-edit-titulo">Cancelar</button>
+      <button class="btn-primary" id="btn-salvar-edit-titulo">Salvar</button>
     </div>
   </div>
 </div>

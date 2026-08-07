@@ -8,6 +8,7 @@ const CIRC  = 2 * Math.PI * 55;
 let dividas = [];
 let activeTabId = null;
 let currentUser = null;
+let perfilAtual = null; // { telefone, profissao, salario, foto_base64 }
 
 /* ── Helpers de cálculo ── */
 function isQuitada(d) {
@@ -56,6 +57,7 @@ function showAppScreen() {
   document.getElementById('auth-screen').classList.remove('show');
   document.getElementById('app-screen').classList.add('show');
   document.getElementById('header-user-email').textContent = currentUser?.email || '';
+  showDividasView();
 }
 
 async function checkSession() {
@@ -78,6 +80,7 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
     currentUser = null;
     dividas = [];
     activeTabId = null;
+    perfilAtual = null;
     showAuthScreen();
   }
 });
@@ -143,6 +146,7 @@ function atualizarTelaAuth() {
 
 async function iniciarApp() {
   await loadDividas();
+  await loadPerfil();
   activeTabId = dividas.length ? dividas[0].id : null;
   renderTabs();
   renderContent();
@@ -165,6 +169,268 @@ async function loadDividas() {
     titulo: d.titulo,
     parcelas: (d.parcelas || []).slice().sort((a, b) => a.ordem - b.ordem),
   }));
+}
+
+/* ============================================================
+   PERFIL DO USUÁRIO
+   ============================================================ */
+
+const PROFISSOES = [
+  'Administrador(a)','Advogado(a)','Agente Comunitário de Saúde','Agricultor(a)','Agrônomo(a)',
+  'Ajudante Geral','Almoxarife','Analista Contábil','Analista de Compras','Analista de Marketing',
+  'Analista de RH','Analista de Sistemas','Analista de Suporte','Analista Financeiro','Analista Fiscal',
+  'Arquiteto(a)','Assistente Administrativo(a)','Assistente Social','Atendente','Auditor(a)',
+  'Auxiliar de Cozinha','Auxiliar de Escritório','Auxiliar de Farmácia','Auxiliar de Limpeza',
+  'Auxiliar de Logística','Auxiliar de Produção','Auxiliar Veterinário(a)','Babá','Bancário(a)',
+  'Barbeiro(a)','Bibliotecário(a)','Biólogo(a)','Biomédico(a)','Bombeiro Civil','Bombeiro Militar',
+  'Cabeleireiro(a)','Caixa','Carpinteiro(a)','Carteiro(a)','Chef de Cozinha','Confeiteiro(a)',
+  'Consultor(a)','Contador(a)','Coordenador(a) Pedagógico(a)','Copeiro(a)','Corretor(a) de Imóveis',
+  'Corretor(a) de Seguros','Costureiro(a)','Cozinheiro(a)','Cozinheiro(a) Industrial','Delegado(a)',
+  'Dentista','Designer de Interiores','Designer Gráfico','Desenvolvedor(a) de Software','Diagramador(a)',
+  'Diarista','Digitador(a)','Diretor(a) Comercial','Diretor(a) de Escola','Eletricista','Eletrotécnico(a)',
+  'Empregado(a) Doméstico(a)','Empresário(a)','Enfermeiro(a)','Encanador(a)','Engenheiro(a) Agrônomo(a)',
+  'Engenheiro(a) Civil','Engenheiro(a) de Alimentos','Engenheiro(a) de Produção','Engenheiro(a) Elétrico(a)',
+  'Engenheiro(a) Mecânico(a)','Engenheiro(a) Químico(a)','Escriturário(a)','Esteticista','Estoquista',
+  'Farmacêutico(a)','Faxineiro(a)','Fisioterapeuta','Fonoaudiólogo(a)','Fotógrafo(a)','Frentista',
+  'Garçom / Garçonete','Gerente Administrativo(a)','Gerente Comercial','Gerente de Loja',
+  'Gerente de Projetos','Gerente de RH','Gerente Financeiro(a)','Gesseiro(a)','Gestor(a) Público(a)',
+  'Guia Turístico(a)','Historiador(a)','Ilustrador(a)','Inspetor(a) de Qualidade',
+  'Instrutor(a) de Autoescola','Instrutor(a) de Yoga','Jardineiro(a)','Jornalista','Juiz(a)',
+  'Locutor(a)','Maquiador(a)','Marceneiro(a)','Massoterapeuta','Mecânico(a) de Automóveis',
+  'Médico(a) Clínico(a) Geral','Médico(a) Especialista','Merendeira','Metalúrgico(a)','Militar',
+  'Modelo','Motoboy','Motorista de Aplicativo','Motorista de Caminhão','Motorista de Ônibus',
+  'Motorista Particular','Músico(a)','Nutricionista','Nutricionista Esportivo(a)','Office Boy / Office Girl',
+  'Operador(a) de Caixa','Operador(a) de Empilhadeira','Operador(a) de Guindaste','Operador(a) de Máquinas',
+  'Operador(a) de Telemarketing','Padeiro(a)','Paisagista','Pedagogo(a)','Pedreiro(a)','Personal Trainer',
+  'Pescador(a)','Piloto de Avião','Pintor(a)','Piscineiro(a)','Policial Civil','Policial Militar',
+  'Porteiro(a)','Professor(a) de Ensino Fundamental','Professor(a) de Ensino Médio',
+  'Professor(a) Universitário(a)','Programador(a)','Promotor(a) de Justiça','Promotor(a) de Vendas',
+  'Psicólogo(a)','Publicitário(a)','Química(o)','Recepcionista','Recreacionista',
+  'Repositor(a) de Mercadorias','Representante Comercial','Repórter','Sacoleiro(a)','Salva-vidas',
+  'Segurança','Segurança Eletrônica','Serralheiro(a)','Servente de Obras','Servidor(a) Público(a)',
+  'Soldador(a)','Supervisor(a) de Produção','Supervisor(a) de Vendas','Sushiman','Tatuador(a)',
+  'Taxista','Técnico(a) Agrícola','Técnico(a) de Enfermagem','Técnico(a) de Informática / TI',
+  'Técnico(a) de Manutenção','Técnico(a) de Segurança do Trabalho','Técnico(a) em Contabilidade',
+  'Técnico(a) em Edificações','Técnico(a) em Eletrônica','Técnico(a) em Radiologia',
+  'Tecnólogo(a) em Logística','Telefonista','Terapeuta Ocupacional','Torneiro(a) Mecânico(a)',
+  'Trader','Tradutor(a) / Intérprete','Vendedor(a)','Vendedor(a) Autônomo(a)','Veterinário(a)',
+  'Vigilante','Web Designer','Zelador(a)','Zootecnista', 'Estudante', 'Aposentado(a)', 'Desempregado(a)',
+  'Autônomo(a) / Freelancer',
+];
+
+async function loadPerfil() {
+  const { data, error } = await supabaseClient
+    .from('perfis')
+    .select('*')
+    .eq('user_id', currentUser.id)
+    .maybeSingle();
+
+  if (error) {
+    showToast('Erro ao carregar perfil: ' + error.message);
+    perfilAtual = null;
+    return;
+  }
+
+  perfilAtual = data || null;
+}
+
+function preencherSelectProfissoes(valorAtual) {
+  const select = document.getElementById('select-perfil-profissao');
+  const listaOrdenada = [...PROFISSOES].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+  const isOutra = valorAtual && !listaOrdenada.includes(valorAtual);
+
+  let html = `<option value="">Selecione...</option>`;
+  html += listaOrdenada.map(p => `<option value="${p}">${p}</option>`).join('');
+  html += `<option value="__outra__">Outra (digitar)</option>`;
+  select.innerHTML = html;
+
+  const inputOutra = document.getElementById('input-perfil-profissao-outra');
+  if (isOutra) {
+    select.value = '__outra__';
+    inputOutra.value = valorAtual;
+    inputOutra.style.display = 'block';
+  } else {
+    select.value = valorAtual || '';
+    inputOutra.value = '';
+    inputOutra.style.display = 'none';
+  }
+}
+
+/* imagem escolhida (base64 redimensionado), pendente de salvar */
+let fotoPerfilPendente = undefined; // undefined = não alterada; string = nova; null = removida
+
+function redimensionarImagem(file, maxLado = 320, qualidade = 0.82) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > height && width > maxLado) {
+          height = Math.round(height * (maxLado / width));
+          width = maxLado;
+        } else if (height > maxLado) {
+          width = Math.round(width * (maxLado / height));
+          height = maxLado;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', qualidade));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function atualizarAvatarPreview(src) {
+  const img = document.getElementById('perfil-avatar-preview');
+  const placeholder = document.getElementById('perfil-avatar-placeholder');
+  if (src) {
+    img.src = src;
+    img.classList.add('show');
+    placeholder.classList.add('hide');
+  } else {
+    img.classList.remove('show');
+    placeholder.classList.remove('hide');
+  }
+}
+
+function renderPerfilForm() {
+  document.getElementById('perfil-email-label').textContent = currentUser?.email || '';
+  document.getElementById('input-perfil-telefone').value = perfilAtual?.telefone || '';
+  document.getElementById('input-perfil-salario').value = perfilAtual?.salario ?? '';
+  preencherSelectProfissoes(perfilAtual?.profissao || '');
+
+  fotoPerfilPendente = undefined;
+  atualizarAvatarPreview(perfilAtual?.foto_base64 || null);
+}
+
+function calcResumoFinanceiro(salario) {
+  const hoje = new Date();
+  const mesAtual = MESES[hoje.getMonth()];
+  const anoAtual = hoje.getFullYear();
+
+  let parcelasMes = 0;
+  let restanteTotal = 0;
+
+  dividas.forEach(d => {
+    restanteTotal += calcDivida(d).restante;
+    d.parcelas.forEach(p => {
+      if (!p.paga && p.mes === mesAtual && p.ano === anoAtual) parcelasMes += p.valor;
+    });
+  });
+
+  const temSalario = salario && salario > 0;
+  return {
+    parcelasMes,
+    restanteTotal,
+    pctComprometido: temSalario ? (parcelasMes / salario) * 100 : null,
+    qtdSalariosRestante: temSalario ? restanteTotal / salario : null,
+  };
+}
+
+function renderResumoFinanceiro() {
+  const section = document.getElementById('perfil-resumo-section');
+  const stats = document.getElementById('perfil-resumo-stats');
+  const salario = perfilAtual?.salario;
+
+  if (!dividas.length && !salario) { section.style.display = 'none'; return; }
+
+  const { parcelasMes, restanteTotal, pctComprometido, qtdSalariosRestante } = calcResumoFinanceiro(salario);
+
+  let pctCard, salariosCard;
+  if (salario && salario > 0) {
+    const pctCor = pctComprometido > 50 ? 'pink' : (pctComprometido > 25 ? 'gold' : 'green');
+    pctCard = `
+      <div class="stat-card ${pctCor}">
+        <div class="stat-label">% do Salário Comprometido (mês atual)</div>
+        <div class="stat-value">${pctComprometido.toFixed(1)}%</div>
+        <div class="stat-sub">R$ ${parcelasMes.toLocaleString('pt-BR')} em parcelas este mês</div>
+      </div>`;
+    salariosCard = `
+      <div class="stat-card blue">
+        <div class="stat-label">Dívida Restante em Salários</div>
+        <div class="stat-value">${qtdSalariosRestante.toFixed(1)}x</div>
+        <div class="stat-sub">equivalente ao seu salário</div>
+      </div>`;
+  } else {
+    pctCard = `
+      <div class="stat-card gold">
+        <div class="stat-label">Parcelas deste Mês</div>
+        <div class="stat-value">R$ ${parcelasMes.toLocaleString('pt-BR')}</div>
+        <div class="stat-sub">cadastre seu salário para ver o %</div>
+      </div>`;
+    salariosCard = '';
+  }
+
+  stats.innerHTML = `
+    ${pctCard}
+    <div class="stat-card pink">
+      <div class="stat-label">Saldo Restante Total</div>
+      <div class="stat-value">R$ ${restanteTotal.toLocaleString('pt-BR')}</div>
+      <div class="stat-sub">somando todas as dívidas ativas</div>
+    </div>
+    ${salariosCard}
+  `;
+  section.style.display = 'block';
+}
+
+async function salvarPerfil() {
+  const telefone  = document.getElementById('input-perfil-telefone').value.trim();
+  const salarioVal = document.getElementById('input-perfil-salario').value;
+  const salario   = salarioVal === '' ? null : parseFloat(salarioVal);
+
+  const selectVal = document.getElementById('select-perfil-profissao').value;
+  const profissao = selectVal === '__outra__'
+    ? document.getElementById('input-perfil-profissao-outra').value.trim()
+    : selectVal;
+
+  if (salario !== null && (isNaN(salario) || salario < 0)) {
+    showToast('Digite um salário válido');
+    return;
+  }
+
+  const payload = {
+    user_id: currentUser.id,
+    telefone: telefone || null,
+    profissao: profissao || null,
+    salario,
+  };
+
+  if (fotoPerfilPendente !== undefined) {
+    payload.foto_base64 = fotoPerfilPendente; // string nova ou null (removida)
+  }
+
+  const { data, error } = await supabaseClient
+    .from('perfis')
+    .upsert(payload, { onConflict: 'user_id' })
+    .select()
+    .single();
+
+  if (error) { showToast('Erro ao salvar perfil: ' + error.message); return; }
+
+  perfilAtual = data;
+  fotoPerfilPendente = undefined;
+  renderResumoFinanceiro();
+  showToast('Perfil salvo com sucesso!');
+}
+
+function showDividasView() {
+  document.getElementById('view-dividas').style.display = 'block';
+  document.getElementById('view-perfil').style.display = 'none';
+}
+
+function showPerfilView() {
+  document.getElementById('view-dividas').style.display = 'none';
+  document.getElementById('view-perfil').style.display = 'block';
+  renderPerfilForm();
+  renderResumoFinanceiro();
 }
 
 /* ── Tabs ── */
@@ -264,11 +530,15 @@ function renderDashboard(content, d) {
   content.innerHTML = `
     <div class="dashboard-header">
       <div>
-        <h2 class="dashboard-title">${d.titulo}</h2>
+        <h2 class="dashboard-title">
+          ${d.titulo}
+          <button class="btn-edit-titulo" id="btn-edit-titulo" title="Editar título">✏️</button>
+        </h2>
         <div class="dashboard-badge">${periodoTexto(d)} · ${d.parcelas.length} parcelas</div>
       </div>
       <div class="dashboard-actions">
         ${quitada ? `<button class="btn-back" id="btn-voltar-quitadas">← Voltar para Quitadas</button>` : ''}
+        <button class="btn-secondary" id="btn-add-parcela" title="Adicionar parcela extra">+ Parcela</button>
         <button class="btn-delete" id="btn-delete-divida" title="Excluir dívida">🗑</button>
       </div>
     </div>
@@ -385,6 +655,8 @@ function renderDashboard(content, d) {
   });
 
   document.getElementById('btn-delete-divida').addEventListener('click', () => excluirDivida(d.id));
+  document.getElementById('btn-add-parcela').addEventListener('click', () => openAddParcelaModal(d.id));
+  document.getElementById('btn-edit-titulo').addEventListener('click', () => openEditTituloModal(d.id));
 }
 
 function renderParcelasGrid(d) {
@@ -477,12 +749,74 @@ async function excluirDivida(id) {
 }
 
 /* ── Modal: nova dívida ── */
+let modoNovaDivida = 'meses'; // 'meses' | 'total'
+
+function round2(n) {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+/* Gera a lista de valores das parcelas a partir do valor total da dívida
+   e do valor que a pessoa pretende pagar por mês. A última parcela recebe
+   o resto (quando a divisão não é exata). */
+function gerarValoresPorTotal(valorTotal, valorMensal) {
+  const valores = [];
+  let restante = round2(valorTotal);
+  let guard = 0;
+  while (restante > 0.005 && guard < 1200) { // guard evita loop infinito
+    const valor = restante >= valorMensal ? valorMensal : restante;
+    valores.push(round2(valor));
+    restante = round2(restante - valor);
+    guard++;
+  }
+  return valores;
+}
+
+function setModoNovaDivida(modo) {
+  modoNovaDivida = modo;
+  document.getElementById('btn-modo-meses').classList.toggle('active', modo === 'meses');
+  document.getElementById('btn-modo-total').classList.toggle('active', modo === 'total');
+  document.getElementById('bloco-modo-meses').style.display = modo === 'meses' ? 'block' : 'none';
+  document.getElementById('bloco-modo-total').style.display = modo === 'total' ? 'block' : 'none';
+  atualizarPreviewModoTotal();
+}
+
+function atualizarPreviewModoTotal() {
+  const preview = document.getElementById('modo-total-preview');
+  if (modoNovaDivida !== 'total') { preview.classList.remove('show'); return; }
+
+  const valorTotal  = parseFloat(document.getElementById('input-valor-total').value);
+  const valorMensal = parseFloat(document.getElementById('input-valor-mensal').value);
+
+  if (isNaN(valorTotal) || valorTotal <= 0 || isNaN(valorMensal) || valorMensal <= 0) {
+    preview.classList.remove('show');
+    return;
+  }
+
+  const valores = gerarValoresPorTotal(valorTotal, valorMensal);
+  const meses = valores.length;
+  const ultima = valores[meses - 1];
+  const igual = valores.every(v => v === valores[0]);
+
+  let texto;
+  if (igual) {
+    texto = `Serão <strong>${meses} parcela${meses !== 1 ? 's' : ''}</strong> de R$ ${valores[0].toLocaleString('pt-BR')}.`;
+  } else {
+    texto = `Serão <strong>${meses} parcelas</strong>: ${meses - 1} de R$ ${valorMensal.toLocaleString('pt-BR')} e a última de R$ ${ultima.toLocaleString('pt-BR')} (ajuste final).`;
+  }
+  preview.innerHTML = texto;
+  preview.classList.add('show');
+}
+
 function openModal() {
   const overlay = document.getElementById('modal-overlay');
 
   document.getElementById('input-titulo').value = '';
   document.getElementById('input-valor').value = '';
   document.getElementById('input-meses').value = '';
+  document.getElementById('input-valor-total').value = '';
+  document.getElementById('input-valor-mensal').value = '';
+
+  setModoNovaDivida('meses');
 
   const selectMes = document.getElementById('input-mes-inicial');
   selectMes.innerHTML = MESES.map((m, i) => `<option value="${i}">${m}</option>`).join('');
@@ -501,15 +835,31 @@ function closeModal() {
 
 async function criarNovaDivida() {
   const titulo = document.getElementById('input-titulo').value.trim();
-  const valor  = parseFloat(document.getElementById('input-valor').value);
-  const meses  = parseInt(document.getElementById('input-meses').value, 10);
   const mesInicial = parseInt(document.getElementById('input-mes-inicial').value, 10);
   const anoInicial  = parseInt(document.getElementById('input-ano-inicial').value, 10);
 
   if (!titulo) { showToast('Digite um título para a dívida'); return; }
-  if (isNaN(valor) || valor < 0) { showToast('Digite um valor de parcela válido'); return; }
-  if (isNaN(meses) || meses < 1) { showToast('Digite a quantidade de meses'); return; }
   if (isNaN(anoInicial)) { showToast('Digite o ano inicial'); return; }
+
+  let valoresParcelas = [];
+
+  if (modoNovaDivida === 'meses') {
+    const valor = parseFloat(document.getElementById('input-valor').value);
+    const meses = parseInt(document.getElementById('input-meses').value, 10);
+
+    if (isNaN(valor) || valor < 0) { showToast('Digite um valor de parcela válido'); return; }
+    if (isNaN(meses) || meses < 1) { showToast('Digite a quantidade de meses'); return; }
+
+    valoresParcelas = Array.from({ length: meses }, () => valor);
+  } else {
+    const valorTotal  = parseFloat(document.getElementById('input-valor-total').value);
+    const valorMensal = parseFloat(document.getElementById('input-valor-mensal').value);
+
+    if (isNaN(valorTotal) || valorTotal <= 0) { showToast('Digite o valor total da dívida'); return; }
+    if (isNaN(valorMensal) || valorMensal <= 0) { showToast('Digite quanto pretende pagar por mês'); return; }
+
+    valoresParcelas = gerarValoresPorTotal(valorTotal, valorMensal);
+  }
 
   const { data: novaDividaRow, error: errDivida } = await supabaseClient
     .from('dividas')
@@ -521,18 +871,18 @@ async function criarNovaDivida() {
 
   const parcelasParaInserir = [];
   let mes = mesInicial, ano = anoInicial;
-  for (let i = 0; i < meses; i++) {
+  valoresParcelas.forEach((valorParcela, i) => {
     parcelasParaInserir.push({
       divida_id: novaDividaRow.id,
       mes: MESES[mes],
       ano,
-      valor,
+      valor: valorParcela,
       paga: false,
       ordem: i,
     });
     mes++;
     if (mes > 11) { mes = 0; ano++; }
-  }
+  });
 
   const { data: parcelasInseridas, error: errParcelas } = await supabaseClient
     .from('parcelas')
@@ -552,7 +902,7 @@ async function criarNovaDivida() {
   closeModal();
   renderTabs();
   renderContent();
-  showToast(`Dívida "${titulo}" criada com sucesso!`);
+  showToast(`Dívida "${titulo}" criada com sucesso! (${valoresParcelas.length} parcelas)`);
 }
 
 /* ── Modal: editar valor de uma parcela específica ── */
@@ -599,6 +949,144 @@ async function salvarEdicaoParcela() {
   showToast(`Valor de ${p.mes} atualizado para R$ ${novoValor.toLocaleString('pt-BR')}`);
 }
 
+async function excluirParcela() {
+  if (!parcelaEmEdicao) return;
+  const { dividaId, idx } = parcelaEmEdicao;
+  const d = dividas.find(x => x.id === dividaId);
+  if (!d) return;
+  const p = d.parcelas[idx];
+
+  const ok = confirm(`Excluir a parcela de ${p.mes}/${p.ano}? Essa ação não pode ser desfeita.`);
+  if (!ok) return;
+
+  const { error } = await supabaseClient.from('parcelas').delete().eq('id', p.id);
+  if (error) { showToast('Erro ao excluir parcela: ' + error.message); return; }
+
+  d.parcelas.splice(idx, 1);
+  closeEditParcelaModal();
+  renderTabs();
+  renderContent();
+  showToast(`Parcela de ${p.mes}/${p.ano} excluída`);
+}
+
+/* ── Modal: adicionar parcela extra a uma dívida existente ── */
+let dividaEmEdicaoParcela = null; // id da dívida recebendo a nova parcela
+
+function openAddParcelaModal(dividaId) {
+  const d = dividas.find(x => x.id === dividaId);
+  if (!d) return;
+  dividaEmEdicaoParcela = dividaId;
+
+  const selectMes = document.getElementById('input-add-mes');
+  selectMes.innerHTML = MESES.map((m, i) => `<option value="${i}">${m}</option>`).join('');
+
+  // sugere o mês seguinte ao da última parcela cadastrada (ou o mês atual, se não houver nenhuma)
+  let proxMes, proxAno;
+  if (d.parcelas.length) {
+    const ultima = d.parcelas[d.parcelas.length - 1];
+    proxMes = MESES.indexOf(ultima.mes);
+    proxAno = ultima.ano;
+    proxMes++;
+    if (proxMes > 11) { proxMes = 0; proxAno++; }
+  } else {
+    const hoje = new Date();
+    proxMes = hoje.getMonth();
+    proxAno = hoje.getFullYear();
+  }
+
+  selectMes.value = proxMes;
+  document.getElementById('input-add-ano').value = proxAno;
+  document.getElementById('input-add-valor').value = '';
+  document.getElementById('input-add-paga').checked = false;
+  document.getElementById('add-parcela-info').textContent = `Dívida: ${d.titulo}`;
+
+  document.getElementById('add-parcela-overlay').classList.add('show');
+  document.getElementById('input-add-valor').focus();
+}
+
+function closeAddParcelaModal() {
+  document.getElementById('add-parcela-overlay').classList.remove('show');
+  dividaEmEdicaoParcela = null;
+}
+
+async function salvarNovaParcela() {
+  if (!dividaEmEdicaoParcela) return;
+  const d = dividas.find(x => x.id === dividaEmEdicaoParcela);
+  if (!d) return;
+
+  const mesIdx = parseInt(document.getElementById('input-add-mes').value, 10);
+  const ano    = parseInt(document.getElementById('input-add-ano').value, 10);
+  const valor  = parseFloat(document.getElementById('input-add-valor').value);
+  const paga   = document.getElementById('input-add-paga').checked;
+
+  if (isNaN(ano)) { showToast('Digite o ano da parcela'); return; }
+  if (isNaN(valor) || valor < 0) { showToast('Digite um valor válido'); return; }
+
+  const maiorOrdem = d.parcelas.reduce((max, p) => Math.max(max, p.ordem), -1);
+
+  const { data: parcelaInserida, error } = await supabaseClient
+    .from('parcelas')
+    .insert({
+      divida_id: d.id,
+      mes: MESES[mesIdx],
+      ano,
+      valor,
+      paga,
+      ordem: maiorOrdem + 1,
+    })
+    .select()
+    .single();
+
+  if (error) { showToast('Erro ao adicionar parcela: ' + error.message); return; }
+
+  d.parcelas.push(parcelaInserida);
+  d.parcelas.sort((a, b) => a.ordem - b.ordem);
+
+  closeAddParcelaModal();
+  renderTabs();
+  renderContent();
+  showToast(`Parcela de ${MESES[mesIdx]}/${ano} adicionada — tudo reajustado automaticamente`);
+}
+
+/* ── Modal: editar título da dívida ── */
+let dividaEmEdicaoTitulo = null;
+
+function openEditTituloModal(dividaId) {
+  const d = dividas.find(x => x.id === dividaId);
+  if (!d) return;
+  dividaEmEdicaoTitulo = dividaId;
+  document.getElementById('input-edit-titulo').value = d.titulo;
+  document.getElementById('edit-titulo-overlay').classList.add('show');
+  document.getElementById('input-edit-titulo').focus();
+}
+
+function closeEditTituloModal() {
+  document.getElementById('edit-titulo-overlay').classList.remove('show');
+  dividaEmEdicaoTitulo = null;
+}
+
+async function salvarEditTitulo() {
+  if (!dividaEmEdicaoTitulo) return;
+  const d = dividas.find(x => x.id === dividaEmEdicaoTitulo);
+  if (!d) return;
+
+  const novoTitulo = document.getElementById('input-edit-titulo').value.trim();
+  if (!novoTitulo) { showToast('Digite um título válido'); return; }
+
+  const { error } = await supabaseClient
+    .from('dividas')
+    .update({ titulo: novoTitulo })
+    .eq('id', d.id);
+
+  if (error) { showToast('Erro ao renomear dívida: ' + error.message); return; }
+
+  d.titulo = novoTitulo;
+  closeEditTituloModal();
+  renderTabs();
+  renderContent();
+  showToast('Título atualizado com sucesso!');
+}
+
 /* ── Listeners globais ── */
 document.getElementById('btn-cancelar-modal').addEventListener('click', closeModal);
 document.getElementById('btn-criar-divida').addEventListener('click', criarNovaDivida);
@@ -606,10 +1094,28 @@ document.getElementById('modal-overlay').addEventListener('click', (e) => {
   if (e.target.id === 'modal-overlay') closeModal();
 });
 
+document.getElementById('btn-modo-meses').addEventListener('click', () => setModoNovaDivida('meses'));
+document.getElementById('btn-modo-total').addEventListener('click', () => setModoNovaDivida('total'));
+document.getElementById('input-valor-total').addEventListener('input', atualizarPreviewModoTotal);
+document.getElementById('input-valor-mensal').addEventListener('input', atualizarPreviewModoTotal);
+
 document.getElementById('btn-cancelar-edit-parcela').addEventListener('click', closeEditParcelaModal);
 document.getElementById('btn-salvar-edit-parcela').addEventListener('click', salvarEdicaoParcela);
+document.getElementById('btn-excluir-parcela').addEventListener('click', excluirParcela);
 document.getElementById('edit-parcela-overlay').addEventListener('click', (e) => {
   if (e.target.id === 'edit-parcela-overlay') closeEditParcelaModal();
+});
+
+document.getElementById('btn-cancelar-add-parcela').addEventListener('click', closeAddParcelaModal);
+document.getElementById('btn-salvar-add-parcela').addEventListener('click', salvarNovaParcela);
+document.getElementById('add-parcela-overlay').addEventListener('click', (e) => {
+  if (e.target.id === 'add-parcela-overlay') closeAddParcelaModal();
+});
+
+document.getElementById('btn-cancelar-edit-titulo').addEventListener('click', closeEditTituloModal);
+document.getElementById('btn-salvar-edit-titulo').addEventListener('click', salvarEditTitulo);
+document.getElementById('edit-titulo-overlay').addEventListener('click', (e) => {
+  if (e.target.id === 'edit-titulo-overlay') closeEditTituloModal();
 });
 
 document.getElementById('btn-auth-confirmar').addEventListener('click', () => {
@@ -623,6 +1129,36 @@ document.getElementById('btn-logout').addEventListener('click', fazerLogout);
   document.getElementById(id).addEventListener('keydown', (e) => {
     if (e.key === 'Enter') document.getElementById('btn-auth-confirmar').click();
   });
+});
+
+/* ── Perfil ── */
+document.getElementById('btn-perfil').addEventListener('click', showPerfilView);
+document.getElementById('btn-voltar-dividas').addEventListener('click', showDividasView);
+document.getElementById('btn-salvar-perfil').addEventListener('click', salvarPerfil);
+
+document.getElementById('select-perfil-profissao').addEventListener('change', (e) => {
+  const inputOutra = document.getElementById('input-perfil-profissao-outra');
+  inputOutra.style.display = e.target.value === '__outra__' ? 'block' : 'none';
+  if (e.target.value === '__outra__') inputOutra.focus();
+});
+
+document.getElementById('btn-trocar-foto').addEventListener('click', () => {
+  document.getElementById('input-foto-perfil').click();
+});
+
+document.getElementById('input-foto-perfil').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { showToast('Selecione um arquivo de imagem'); return; }
+
+  try {
+    const dataUrl = await redimensionarImagem(file);
+    fotoPerfilPendente = dataUrl;
+    atualizarAvatarPreview(dataUrl);
+  } catch {
+    showToast('Não foi possível processar a imagem');
+  }
+  e.target.value = '';
 });
 
 /* ── Início ── */
