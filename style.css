@@ -1,3 +1,15 @@
+/* ============================================================
+   PALETA SEMÂNTICA
+   Use estas cores com o MESMO significado em qualquer lugar do app:
+
+   .green (var(--accent), lima)   → positivo: pago, saudável, progresso
+   .blue  (var(--accent2), ciano) → neutro/informativo: totais, saldos, previsões
+   .gold  (#f0a060, laranja)      → atenção: precisa de ação ou é a próxima etapa
+   .pink  (var(--accent3), rosa)  → negativo/crítico: atraso, juros, risco
+
+   Ao adicionar um novo stat-card ou badge, escolha a cor pelo SIGNIFICADO
+   do dado, não pela posição ou preferência visual.
+   ============================================================ */
 :root {
   --bg: #0a0a0f;
   --card: #111118;
@@ -132,29 +144,15 @@ header {
 
 .dashboard-title {
   font-family: 'Syne', sans-serif;
-  font-size: 1.8rem;
+  font-size: 2rem;
   font-weight: 800;
   letter-spacing: -1px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  line-height: 1.15;
 }
-
-.btn-edit-titulo {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 1rem;
-  opacity: .5;
-  transition: opacity .2s;
-  line-height: 1;
-}
-
-.btn-edit-titulo:hover { opacity: 1; }
 
 .dashboard-badge {
   display: inline-block;
-  margin-top: 8px;
+  margin-top: 10px;
   background: var(--card2);
   border: 1px solid var(--border);
   color: #888899;
@@ -211,7 +209,11 @@ header {
   transition: border-color .3s, transform .3s;
 }
 
-.stat-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.stat-card:hover {
+  border-color: var(--line-color, var(--accent));
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(0,0,0,.28);
+}
 
 .stat-card::before {
   content: '';
@@ -353,7 +355,10 @@ header {
   display: flex;
   flex-direction: column;
   align-items: center;
+  transition: border-color .3s, transform .3s;
 }
+
+.chart-card:hover { border-color: #333345; transform: translateY(-2px); }
 
 .donut-wrap { position: relative; width: 140px; height: 140px; margin: 16px auto; }
 .donut-wrap svg { transform: rotate(-90deg); }
@@ -497,14 +502,42 @@ header {
 }
 
 /* ── QUITADAS LIST ── */
-.quitadas-empty {
+/* ── ESTADO VAZIO (ícone + título + subtítulo + CTA) ── */
+.empty-state {
   background: var(--card);
-  border: 1px dashed var(--border);
-  border-radius: 20px;
-  padding: 48px;
+  border: 1.5px dashed var(--border);
+  border-radius: 24px;
+  padding: 64px 32px;
   text-align: center;
-  color: #555566;
-  font-size: 0.85rem;
+  animation: fadeUp .5s ease both;
+}
+
+.empty-state-icon {
+  font-size: 2.6rem;
+  line-height: 1;
+  margin-bottom: 18px;
+  opacity: 0.9;
+  filter: grayscale(0.15);
+}
+
+.empty-state-title {
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.empty-state-subtitle {
+  font-size: 0.78rem;
+  color: #888899;
+  line-height: 1.6;
+  max-width: 380px;
+  margin: 0 auto;
+}
+
+.empty-state-cta {
+  margin-top: 24px;
 }
 
 .quitadas-grid {
@@ -756,6 +789,9 @@ header {
 
 .parcela-card.just-toggled { animation: pulse-border .6s ease; }
 
+/* ── TRANSIÇÃO ENTRE VIEWS/ABAS ── */
+.view-fade-in { animation: fadeUp .35s ease both; }
+
 @media (max-width: 640px) {
   .chart-row        { grid-template-columns: 1fr; }
   .breakdown-grid   { grid-template-columns: 1fr; }
@@ -994,4 +1030,413 @@ header {
   color: #888899;
   padding: 20px;
   text-align: center;
+}
+
+
+/* ── ALERTAS DE ATRASO ── */
+.badge-atraso {
+  margin-left: 8px;
+  background: rgba(240,96,168,.12) !important;
+  border-color: rgba(240,96,168,.4) !important;
+  color: var(--accent3) !important;
+}
+
+.parcela-card.atrasada {
+  border-color: rgba(240,96,168,.5);
+  box-shadow: 0 0 0 1px rgba(240,96,168,.25);
+}
+
+.parcela-card.atrasada .parcela-status {
+  color: var(--accent3);
+}
+
+.parcela-card.atrasada:not(.pago) {
+  animation: pulseAtraso 2.4s ease-in-out infinite;
+}
+
+@keyframes pulseAtraso {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(240,96,168,.25); }
+  50% { box-shadow: 0 0 0 3px rgba(240,96,168,.4); }
+}
+
+/* ── MODAL HINT ── */
+.modal-hint {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.75rem;
+  color: #888899;
+  line-height: 1.5;
+  margin: 10px 0 4px;
+}
+
+.modal-hint strong { color: var(--accent); }
+
+/* ── MODAL: EDITAR DÍVIDA (COMPLETA) ── */
+.modal-lg { max-width: 560px; }
+
+.ed-parcelas-section { margin-top: 22px; }
+
+.ed-parcelas-list {
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card2);
+  margin-top: 8px;
+}
+
+.ed-parcelas-empty {
+  padding: 20px;
+  text-align: center;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.75rem;
+  color: #666680;
+}
+
+.ed-parcela-row {
+  display: grid;
+  grid-template-columns: 64px 84px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.78rem;
+}
+
+.ed-parcela-row:last-child { border-bottom: none; }
+
+.ed-parcela-data { color: var(--text); font-weight: 500; }
+.ed-parcela-data span { color: #666688; }
+
+.ed-parcela-status {
+  font-size: 0.65rem;
+  color: #666688;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.ed-parcela-status.pago { color: var(--accent); }
+
+.ed-parcela-valor-view { font-weight: 700; color: var(--text); text-align: right; }
+
+.ed-parcela-valor-input {
+  width: 100%;
+  background: var(--card);
+  border: 1.5px solid var(--accent);
+  border-radius: 8px;
+  padding: 6px 10px;
+  color: var(--text);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.78rem;
+  outline: none;
+  text-align: right;
+}
+
+.ed-parcela-actions { display: flex; gap: 4px; justify-self: end; }
+
+.ed-parcela-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: #888899;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0.7rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .2s;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.ed-parcela-btn:hover { border-color: var(--accent); color: var(--accent); transform: scale(1.08); }
+.ed-parcela-btn.ed-parcela-confirm { border-color: var(--accent); color: var(--accent); }
+.ed-parcela-btn.ed-parcela-del:hover { border-color: var(--accent3); color: var(--accent3); }
+
+@media (max-width: 480px) {
+  .ed-parcela-row { grid-template-columns: 54px 1fr auto; font-size: 0.72rem; padding: 8px 10px; }
+  .ed-parcela-status { display: none; }
+  .ed-parcela-btn { width: 24px; height: 24px; }
+}
+
+/* ── VISÃO GERAL: barras de previsão mensal ── */
+.mes-bar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.mes-bar-row {
+  display: grid;
+  grid-template-columns: 60px 1fr 100px;
+  align-items: center;
+  gap: 12px;
+}
+
+.mes-bar-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.75rem;
+  color: #888899;
+  text-transform: capitalize;
+}
+
+.mes-bar-track {
+  height: 22px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  overflow: hidden;
+}
+
+.mes-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent2), var(--accent));
+  border-radius: 100px;
+  transition: width .6s ease;
+}
+
+.mes-bar-valor {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--text);
+  text-align: right;
+}
+
+@media (max-width: 600px) {
+  .mes-bar-row { grid-template-columns: 48px 1fr 80px; gap: 8px; }
+  .mes-bar-valor { font-size: 0.68rem; }
+}
+
+/* ── VISÃO GERAL: banner de saúde financeira ── */
+.saude-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 28px 32px;
+  margin-bottom: 24px;
+  position: relative;
+  overflow: hidden;
+  animation: fadeUp .5s ease both;
+}
+
+.saude-hero::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 5px;
+  background: var(--saude-color, var(--accent));
+}
+
+.saude-hero.saude-green { --saude-color: var(--accent); }
+.saude-hero.saude-gold  { --saude-color: #f0a060; }
+.saude-hero.saude-pink  { --saude-color: var(--accent3); }
+
+.saude-hero-label {
+  font-size: 0.68rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #888899;
+  margin-bottom: 8px;
+}
+
+.saude-hero-value {
+  font-family: 'Syne', sans-serif;
+  font-size: 2.1rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.saude-hero-sub {
+  margin-top: 8px;
+  font-size: 0.78rem;
+  color: #888899;
+  font-family: 'DM Mono', monospace;
+}
+
+.saude-hero-right { text-align: right; }
+
+.saude-hero-stat-val {
+  display: block;
+  font-family: 'Syne', sans-serif;
+  font-size: 1.7rem;
+  font-weight: 700;
+}
+
+.saude-hero-stat-lbl {
+  display: block;
+  font-size: 0.65rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #666688;
+  margin-top: 4px;
+}
+
+/* ── VISÃO GERAL: CTA quando não há salário cadastrado ── */
+.saude-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: var(--card2);
+  border: 1.5px dashed var(--border);
+  border-radius: 16px;
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  animation: fadeUp .5s ease both;
+}
+
+.saude-cta-text {
+  font-size: 0.8rem;
+  color: #aaaac0;
+  line-height: 1.5;
+  font-family: 'DM Mono', monospace;
+  max-width: 560px;
+}
+
+.saude-cta-text strong { color: var(--accent); }
+
+/* ── VISÃO GERAL: marcador de salário e barra de risco na previsão ── */
+.mes-bar-track { position: relative; }
+
+.mes-bar-salario-marker {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  background: repeating-linear-gradient(to bottom, #cccce0 0 4px, transparent 4px 8px);
+  z-index: 2;
+}
+
+.mes-bar-fill.risco { background: linear-gradient(90deg, var(--accent3), #f0a060); }
+.mes-bar-row.risco .mes-bar-valor { color: var(--accent3); font-weight: 700; }
+
+@media (max-width: 768px) {
+  .saude-hero { padding: 22px 20px; gap: 16px; }
+  .saude-hero-right { text-align: left; }
+  .saude-hero-value { font-size: 1.7rem; }
+  .saude-cta { flex-direction: column; align-items: stretch; }
+  .saude-cta button { width: 100%; }
+}
+
+/* ============================================================
+   RESPONSIVIDADE MOBILE
+   (o app foi desenhado pensando em desktop; este bloco reorganiza
+   header, grids, cards e modais para telas pequenas)
+   ============================================================ */
+
+/* ── TABLETS / TELAS MÉDIAS ── */
+@media (max-width: 900px) {
+  .container { padding: 36px 20px; }
+
+  .stats-grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+}
+
+/* ── CELULARES (até 768px) ── */
+@media (max-width: 768px) {
+  .container { padding: 24px 16px 40px; }
+
+  /* Header vira coluna: título, depois ações, sem estourar largura */
+  header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .header-left h1 { font-size: 1.9rem; letter-spacing: -1px; }
+  .header-left p { font-size: 0.68rem; letter-spacing: 1px; }
+
+  .header-right {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .header-user-email {
+    width: 100%;
+    order: -1;
+    font-size: 0.65rem;
+    word-break: break-all;
+  }
+
+  .header-right .btn-back {
+    flex: 1 1 auto;
+    text-align: center;
+    padding: 10px 8px;
+    font-size: 0.68rem;
+  }
+
+  /* Abas com scroll horizontal em vez de empilhar em várias linhas */
+  .tab-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 12px;
+    margin-bottom: 24px;
+  }
+  .tab-bar::-webkit-scrollbar { display: none; }
+  .tab { flex-shrink: 0; }
+
+  /* Cabeçalho das views Geral/Perfil empilhado, botão de voltar 100% */
+  .dashboard-header { flex-direction: column; align-items: stretch; gap: 12px; }
+  .dashboard-title { font-size: 1.4rem; }
+  .dashboard-actions { width: 100%; }
+  .dashboard-actions .btn-back { width: 100%; text-align: center; }
+
+  /* Cards e seções com menos padding para caber melhor */
+  .chart-card, .progress-section, .timeline-section, .stat-card { padding: 18px; border-radius: 14px; }
+  .progress-section, .timeline-section { padding: 20px; }
+
+  .stats-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  .stat-value { font-size: 1.5rem; }
+
+  /* Grid de parcelas com colunas menores, mais colunas cabem sem cortar */
+  .parcelas-grid { grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); gap: 10px; }
+  .parcela-card { padding: 12px; }
+  .parcela-valor { font-size: 1.05rem; }
+  .parcela-mes { font-size: 0.62rem; }
+
+  .quitadas-grid { grid-template-columns: 1fr; }
+
+  /* Modais ocupam a largura toda com menos padding */
+  .modal { padding: 22px 18px; border-radius: 16px; }
+  .modal-title { font-size: 1.1rem; }
+  .modal-actions { flex-direction: column-reverse; gap: 10px; margin-top: 22px; }
+  .modal-actions button { width: 100%; }
+  .btn-danger { margin-right: 0; }
+
+  /* Perfil: avatar menor pra não dominar a tela */
+  .perfil-avatar-wrap, .perfil-avatar, .perfil-avatar-placeholder { width: 100px; height: 100px; }
+  .perfil-card { padding: 20px; }
+
+  .auth-box { padding: 32px 24px; }
+}
+
+/* ── TELAS BEM PEQUENAS (até 420px) ── */
+@media (max-width: 420px) {
+  .header-left h1 { font-size: 1.6rem; }
+  .auth-logo { font-size: 1.6rem; }
+  .auth-box { padding: 26px 18px; }
+
+  .tab { padding: 8px 14px; font-size: 0.7rem; }
+
+  .parcelas-grid { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 8px; }
+  .parcela-card { padding: 10px; }
+  .parcela-valor { font-size: 0.95rem; }
+
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+
+  .breakdown-item { padding: 12px; }
+
+  .perfil-avatar-wrap, .perfil-avatar, .perfil-avatar-placeholder { width: 84px; height: 84px; }
 }

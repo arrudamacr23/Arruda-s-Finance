@@ -10,9 +10,34 @@ let activeTabId = null;
 let currentUser = null;
 let perfilAtual = null; // { telefone, profissao, salario, foto_base64 }
 
+/* ── Estado vazio reutilizável (ícone + título + subtítulo + CTA opcional) ── */
+function emptyStateHtml({ icon = '📂', title, subtitle = '', ctaLabel = null, ctaId = null }) {
+  return `
+    <div class="empty-state">
+      <div class="empty-state-icon">${icon}</div>
+      <div class="empty-state-title">${title}</div>
+      ${subtitle ? `<div class="empty-state-subtitle">${subtitle}</div>` : ''}
+      ${ctaLabel ? `<button class="btn-primary empty-state-cta" id="${ctaId}">${ctaLabel}</button>` : ''}
+    </div>
+  `;
+}
+
 /* ── Helpers de cálculo ── */
 function isQuitada(d) {
   return d.parcelas.length > 0 && d.parcelas.every(p => p.paga);
+}
+
+function hojeInfo() {
+  const hoje = new Date();
+  return { mesIdx: hoje.getMonth(), ano: hoje.getFullYear() };
+}
+
+/* uma parcela é considerada atrasada se ainda não foi paga e o mês/ano dela já passou */
+function isAtrasada(p) {
+  if (p.paga) return false;
+  const { mesIdx, ano } = hojeInfo();
+  const pMesIdx = MESES.indexOf(p.mes);
+  return (p.ano < ano) || (p.ano === ano && pMesIdx < mesIdx);
 }
 
 function calcDivida(d) {
@@ -23,13 +48,23 @@ function calcDivida(d) {
   const numPagas    = d.parcelas.filter(p => p.paga).length;
   const numFaltam   = d.parcelas.length - numPagas;
   const proxIdx     = d.parcelas.findIndex(p => !p.paga);
-  return { total, descontado, restante, pct, numPagas, numFaltam, proxIdx };
+  const numAtrasadas = d.parcelas.filter(isAtrasada).length;
+  const valorAtrasado = d.parcelas.filter(isAtrasada).reduce((s, p) => s + p.valor, 0);
+  const ultimaParcela = d.parcelas.length ? d.parcelas[d.parcelas.length - 1] : null;
+  const juros = (d.valorOriginal != null && d.valorOriginal > 0) ? (total - d.valorOriginal) : null;
+  return { total, descontado, restante, pct, numPagas, numFaltam, proxIdx, numAtrasadas, valorAtrasado, ultimaParcela, juros };
 }
 
 function periodoTexto(d) {
   if (!d.parcelas.length) return '—';
   const anos = [...new Set(d.parcelas.map(p => p.ano))];
   return anos.length === 1 ? `${anos[0]}` : `${anos[0]} / ${anos[anos.length - 1]}`;
+}
+
+/* ordena parcelas cronologicamente (ano/mês); usa 'ordem' como desempate */
+function chaveData(p) { return p.ano * 12 + MESES.indexOf(p.mes); }
+function ordenarParcelas(arr) {
+  return arr.slice().sort((a, b) => chaveData(a) - chaveData(b) || a.ordem - b.ordem);
 }
 
 /* ── Toast ── */
@@ -155,7 +190,7 @@ async function iniciarApp() {
 async function loadDividas() {
   const { data, error } = await supabaseClient
     .from('dividas')
-    .select('id, titulo, created_at, parcelas(id, mes, ano, valor, paga, ordem)')
+    .select('id, titulo, created_at, valor_original, parcelas(id, mes, ano, valor, paga, ordem, pago_em)')
     .order('created_at', { ascending: true });
 
   if (error) {
@@ -167,7 +202,8 @@ async function loadDividas() {
   dividas = (data || []).map(d => ({
     id: d.id,
     titulo: d.titulo,
-    parcelas: (d.parcelas || []).slice().sort((a, b) => a.ordem - b.ordem),
+    valorOriginal: d.valor_original,
+    parcelas: ordenarParcelas(d.parcelas || []),
   }));
 }
 
@@ -344,9 +380,9 @@ function renderResumoFinanceiro() {
 
   const { parcelasMes, restanteTotal, pctComprometido, qtdSalariosRestante } = calcResumoFinanceiro(salario);
 
-  let pctCard, salariosCard;
+  let pctCard, salariosCard, saudeCard = '';
   if (salario && salario > 0) {
-    const pctCor = pctComprometido > 50 ? 'pink' : (pctComprometido > 25 ? 'gold' : 'green');
+    const pctCor = pctComprometido > 50 ? 'pink' : (pctComprometido > 30 ? 'gold' : 'green');
     pctCard = `
       <div class="stat-card ${pctCor}">
         <div class="stat-label">% do Salário Comprometido (mês atual)</div>
@@ -358,6 +394,19 @@ function renderResumoFinanceiro() {
         <div class="stat-label">Dívida Restante em Salários</div>
         <div class="stat-value">${qtdSalariosRestante.toFixed(1)}x</div>
         <div class="stat-sub">equivalente ao seu salário</div>
+      </div>`;
+
+    const sobra = salario - parcelasMes;
+    let selo, seloTexto, seloClasse;
+    if (pctComprometido <= 30) { selo = '🟢'; seloTexto = 'Saudável'; seloClasse = 'green'; }
+    else if (pctComprometido <= 50) { selo = '🟡'; seloTexto = 'Atenção'; seloClasse = 'gold'; }
+    else { selo = '🔴'; seloTexto = 'Crítico'; seloClasse = 'pink'; }
+
+    saudeCard = `
+      <div class="stat-card ${seloClasse}">
+        <div class="stat-label">Saúde Financeira</div>
+        <div class="stat-value">${selo} ${seloTexto}</div>
+        <div class="stat-sub">sobra estimada de R$ ${sobra.toLocaleString('pt-BR')} este mês</div>
       </div>`;
   } else {
     pctCard = `
@@ -371,12 +420,13 @@ function renderResumoFinanceiro() {
 
   stats.innerHTML = `
     ${pctCard}
-    <div class="stat-card pink">
+    <div class="stat-card blue">
       <div class="stat-label">Saldo Restante Total</div>
       <div class="stat-value">R$ ${restanteTotal.toLocaleString('pt-BR')}</div>
       <div class="stat-sub">somando todas as dívidas ativas</div>
     </div>
     ${salariosCard}
+    ${saudeCard}
   `;
   section.style.display = 'block';
 }
@@ -421,16 +471,211 @@ async function salvarPerfil() {
   showToast('Perfil salvo com sucesso!');
 }
 
+/* dispara (ou reinicia) a animação de entrada de uma view */
+function fadeInView(el) {
+  el.classList.remove('view-fade-in');
+  void el.offsetWidth; // força reflow pra reiniciar a animação
+  el.classList.add('view-fade-in');
+}
+
 function showDividasView() {
   document.getElementById('view-dividas').style.display = 'block';
   document.getElementById('view-perfil').style.display = 'none';
+  document.getElementById('view-geral').style.display = 'none';
+  fadeInView(document.getElementById('view-dividas'));
 }
 
 function showPerfilView() {
   document.getElementById('view-dividas').style.display = 'none';
   document.getElementById('view-perfil').style.display = 'block';
+  document.getElementById('view-geral').style.display = 'none';
   renderPerfilForm();
   renderResumoFinanceiro();
+  fadeInView(document.getElementById('view-perfil'));
+}
+
+function showGeralView() {
+  document.getElementById('view-dividas').style.display = 'none';
+  document.getElementById('view-perfil').style.display = 'none';
+  document.getElementById('view-geral').style.display = 'block';
+  renderVisaoGeral();
+  fadeInView(document.getElementById('view-geral'));
+}
+
+/* soma, para cada uma das próximas `qtdMeses` (a partir do mês atual),
+   o total de parcelas não pagas de TODAS as dívidas que caem naquele mês */
+function calcProximosMeses(qtdMeses = 6) {
+  const { mesIdx, ano } = hojeInfo();
+  const chaveInicio = ano * 12 + mesIdx;
+  const porMes = new Map();
+
+  for (let i = 0; i < qtdMeses; i++) {
+    const chave = chaveInicio + i;
+    porMes.set(chave, { mes: MESES[chave % 12], ano: Math.floor(chave / 12), total: 0 });
+  }
+
+  dividas.forEach(d => {
+    d.parcelas.forEach(p => {
+      if (p.paga) return;
+      const chave = p.ano * 12 + MESES.indexOf(p.mes);
+      if (porMes.has(chave)) porMes.get(chave).total += p.valor;
+    });
+  });
+
+  return [...porMes.values()];
+}
+
+/* encontra a parcela não paga mais distante no tempo, entre todas as dívidas —
+   isso indica quando (em teoria) tudo estará quitado */
+function calcPrevisaoQuitacaoTotal() {
+  let maxChave = null;
+  dividas.forEach(d => {
+    d.parcelas.forEach(p => {
+      if (!p.paga) {
+        const chave = chaveData(p);
+        if (maxChave === null || chave > maxChave) maxChave = chave;
+      }
+    });
+  });
+  if (maxChave === null) return null;
+
+  const { mesIdx, ano } = hojeInfo();
+  const chaveAtual = ano * 12 + mesIdx;
+  return {
+    mesesRestantes: maxChave - chaveAtual,
+    mesFinal: MESES[maxChave % 12],
+    anoFinal: Math.floor(maxChave / 12),
+  };
+}
+
+function renderVisaoGeral() {
+  const container = document.getElementById('geral-content');
+
+  if (!dividas.length) {
+    container.innerHTML = emptyStateHtml({
+      icon: '📊',
+      title: 'Nenhuma dívida cadastrada ainda',
+      subtitle: 'Cadastre sua primeira dívida na aba "Dívidas" pra começar a ver seu painel completo aqui.',
+    });
+    return;
+  }
+
+  let totalGeral = 0, atrasadasGeral = 0, valorAtrasadoGeral = 0, totalPagoAnoAtual = 0;
+  const { mesIdx, ano } = hojeInfo();
+
+  dividas.forEach(d => {
+    totalGeral += calcDivida(d).total;
+    d.parcelas.forEach(p => {
+      if (isAtrasada(p)) { atrasadasGeral++; valorAtrasadoGeral += p.valor; }
+      if (p.paga && p.pago_em && new Date(p.pago_em).getFullYear() === ano) totalPagoAnoAtual += p.valor;
+    });
+  });
+
+  const salario = perfilAtual?.salario;
+  const temSalario = salario && salario > 0;
+  const { parcelasMes, restanteTotal, pctComprometido, qtdSalariosRestante } = calcResumoFinanceiro(salario);
+  const previsaoQuitacao = calcPrevisaoQuitacaoTotal();
+
+  const meses = calcProximosMeses(6);
+  const maiorMes = Math.max(1, temSalario ? salario : 0, ...meses.map(m => m.total));
+
+  /* ── Cabeçalho: banner de saúde financeira, ou CTA para cadastrar salário ── */
+  let saudeHtml;
+  if (temSalario) {
+    const sobra = salario - parcelasMes;
+    let selo, seloTexto, seloClasse;
+    if (pctComprometido <= 30) { selo = '🟢'; seloTexto = 'Saudável'; seloClasse = 'green'; }
+    else if (pctComprometido <= 50) { selo = '🟡'; seloTexto = 'Atenção'; seloClasse = 'gold'; }
+    else { selo = '🔴'; seloTexto = 'Crítico'; seloClasse = 'pink'; }
+
+    saudeHtml = `
+      <div class="saude-hero saude-${seloClasse}">
+        <div class="saude-hero-left">
+          <div class="saude-hero-label">Saúde Financeira</div>
+          <div class="saude-hero-value">${selo} ${seloTexto}</div>
+          <div class="saude-hero-sub">${pctComprometido.toFixed(1)}% da sua renda mensal está comprometida com dívidas</div>
+        </div>
+        <div class="saude-hero-right">
+          <div class="saude-hero-stat">
+            <span class="saude-hero-stat-val" style="color:${sobra >= 0 ? 'var(--accent)' : 'var(--accent3)'}">R$ ${sobra.toLocaleString('pt-BR')}</span>
+            <span class="saude-hero-stat-lbl">sobra estimada este mês</span>
+          </div>
+        </div>
+      </div>`;
+  } else {
+    saudeHtml = `
+      <div class="saude-cta">
+        <div class="saude-cta-text">💡 Cadastre seu <strong>salário</strong> no Perfil pra ver o quanto da sua renda está comprometida com dívidas e receber um indicador de saúde financeira.</div>
+        <button class="btn-secondary" id="btn-geral-ir-perfil">Ir para o Perfil</button>
+      </div>`;
+  }
+
+  container.innerHTML = `
+    ${saudeHtml}
+
+    <div class="stats-grid">
+      <div class="stat-card blue">
+        <div class="stat-label">Total Geral (todas as dívidas)</div>
+        <div class="stat-value">R$ ${totalGeral.toLocaleString('pt-BR')}</div>
+        <div class="stat-sub">${dividas.length} dívida${dividas.length !== 1 ? 's' : ''} cadastrada${dividas.length !== 1 ? 's' : ''}</div>
+      </div>
+      <div class="stat-card blue">
+        <div class="stat-label">Saldo Restante Geral</div>
+        <div class="stat-value">R$ ${restanteTotal.toLocaleString('pt-BR')}</div>
+        <div class="stat-sub">somando todas as dívidas ativas</div>
+      </div>
+      <div class="stat-card ${temSalario ? (pctComprometido > 50 ? 'pink' : pctComprometido > 30 ? 'gold' : 'green') : 'gold'}">
+        <div class="stat-label">Parcelas deste Mês</div>
+        <div class="stat-value">R$ ${parcelasMes.toLocaleString('pt-BR')}</div>
+        <div class="stat-sub">${temSalario ? `${pctComprometido.toFixed(1)}% da sua renda` : `${MESES[mesIdx]}/${ano} · cadastre o salário p/ ver %`}</div>
+      </div>
+      <div class="stat-card ${atrasadasGeral > 0 ? 'pink' : 'blue'}">
+        <div class="stat-label">Parcelas Atrasadas</div>
+        <div class="stat-value">${atrasadasGeral}</div>
+        <div class="stat-sub">${atrasadasGeral > 0 ? `R$ ${valorAtrasadoGeral.toLocaleString('pt-BR')} em atraso` : 'nenhuma parcela atrasada 🎉'}</div>
+      </div>
+      <div class="stat-card green">
+        <div class="stat-label">Total Pago em ${ano}</div>
+        <div class="stat-value">R$ ${totalPagoAnoAtual.toLocaleString('pt-BR')}</div>
+        <div class="stat-sub">parcelas marcadas como pagas este ano</div>
+      </div>
+      ${temSalario ? `
+      <div class="stat-card blue">
+        <div class="stat-label">Dívida Restante em Salários</div>
+        <div class="stat-value">${qtdSalariosRestante.toFixed(1)}x</div>
+        <div class="stat-sub">equivalente ao seu salário mensal</div>
+      </div>` : ''}
+      ${previsaoQuitacao ? `
+      <div class="stat-card blue">
+        <div class="stat-label">Previsão de Quitação Total</div>
+        <div class="stat-value">${previsaoQuitacao.mesesRestantes <= 0 ? 'Este mês' : `${previsaoQuitacao.mesesRestantes} ${previsaoQuitacao.mesesRestantes === 1 ? 'mês' : 'meses'}`}</div>
+        <div class="stat-sub">última parcela prevista: ${previsaoQuitacao.mesFinal}/${previsaoQuitacao.anoFinal}</div>
+      </div>` : ''}
+    </div>
+
+    <div class="progress-section">
+      <div class="section-title">Previsão dos Próximos 6 Meses</div>
+      <div class="timeline-hint">Soma das parcelas não pagas de todas as dívidas, mês a mês${temSalario ? ' · linha tracejada = seu salário · barra rosa = mês que ultrapassa o salário' : ''}</div>
+      <div class="mes-bar-list">
+        ${meses.map(m => {
+          const estoura = temSalario && m.total > salario;
+          const salarioPct = temSalario ? Math.min(100, (salario / maiorMes) * 100) : null;
+          return `
+          <div class="mes-bar-row ${estoura ? 'risco' : ''}">
+            <div class="mes-bar-label">${m.mes.slice(0, 3)}/${String(m.ano).slice(2)}</div>
+            <div class="mes-bar-track">
+              ${temSalario ? `<div class="mes-bar-salario-marker" style="left:${salarioPct}%" title="Seu salário: R$ ${salario.toLocaleString('pt-BR')}"></div>` : ''}
+              <div class="mes-bar-fill ${estoura ? 'risco' : ''}" style="width:${m.total ? Math.max(4, (m.total / maiorMes) * 100) : 0}%"></div>
+            </div>
+            <div class="mes-bar-valor">R$ ${m.total.toLocaleString('pt-BR')}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+
+  const btnIrPerfil = document.getElementById('btn-geral-ir-perfil');
+  if (btnIrPerfil) btnIrPerfil.addEventListener('click', showPerfilView);
 }
 
 /* ── Tabs ── */
@@ -439,9 +684,19 @@ function renderTabs() {
   const ativas    = dividas.filter(d => !isQuitada(d));
   const quitadas  = dividas.filter(isQuitada);
 
+  // ordena por urgência: dívidas com parcela atrasada primeiro, depois pela data da próxima parcela
+  ativas.sort((a, b) => {
+    const ca = calcDivida(a), cb = calcDivida(b);
+    if (ca.numAtrasadas !== cb.numAtrasadas) return cb.numAtrasadas - ca.numAtrasadas;
+    const proxA = ca.proxIdx >= 0 ? chaveData(a.parcelas[ca.proxIdx]) : Infinity;
+    const proxB = cb.proxIdx >= 0 ? chaveData(b.parcelas[cb.proxIdx]) : Infinity;
+    return proxA - proxB;
+  });
+
   let html = '';
   ativas.forEach(d => {
-    html += `<button class="tab ${d.id === activeTabId ? 'active' : ''}" data-id="${d.id}">${d.titulo}</button>`;
+    const { numAtrasadas } = calcDivida(d);
+    html += `<button class="tab ${d.id === activeTabId ? 'active' : ''}" data-id="${d.id}">${numAtrasadas > 0 ? '⚠️ ' : ''}${d.titulo}</button>`;
   });
   html += `<button class="tab tab-quitadas ${activeTabId === '__quitadas__' ? 'active' : ''}" data-id="__quitadas__">✓ Quitadas (${quitadas.length})</button>`;
   html += `<button class="tab tab-add" id="btn-add-divida">+ Nova Dívida</button>`;
@@ -463,12 +718,21 @@ function renderContent() {
   const content = document.getElementById('app-content');
 
   if (!dividas.length) {
-    content.innerHTML = `<div class="quitadas-empty">Nenhuma dívida cadastrada.<br/>Clique em <strong>+ Nova Dívida</strong> para começar.</div>`;
+    content.innerHTML = emptyStateHtml({
+      icon: '💳',
+      title: 'Nenhuma dívida cadastrada',
+      subtitle: 'Comece cadastrando sua primeira dívida — financiamento, cartão, empréstimo, o que for.',
+      ctaLabel: '+ Nova Dívida',
+      ctaId: 'btn-empty-nova-divida',
+    });
+    document.getElementById('btn-empty-nova-divida').addEventListener('click', openModal);
+    fadeInView(content);
     return;
   }
 
   if (activeTabId === '__quitadas__') {
     renderQuitadasList(content);
+    fadeInView(content);
     return;
   }
 
@@ -479,13 +743,18 @@ function renderContent() {
     return renderContent();
   }
   renderDashboard(content, d);
+  fadeInView(content);
 }
 
 function renderQuitadasList(content) {
   const quitadas = dividas.filter(isQuitada);
 
   if (!quitadas.length) {
-    content.innerHTML = `<div class="quitadas-empty">Nenhuma dívida quitada ainda.<br/>Quando todas as parcelas de uma dívida forem marcadas como pagas, ela aparece aqui.</div>`;
+    content.innerHTML = emptyStateHtml({
+      icon: '🏆',
+      title: 'Nenhuma dívida quitada ainda',
+      subtitle: 'Quando todas as parcelas de uma dívida forem marcadas como pagas, ela aparece aqui.',
+    });
     return;
   }
 
@@ -514,7 +783,7 @@ function renderQuitadasList(content) {
 
 /* ── Dashboard de uma dívida ── */
 function renderDashboard(content, d) {
-  const { total, descontado, restante, pct, numPagas, numFaltam, proxIdx } = calcDivida(d);
+  const { total, descontado, restante, pct, numPagas, numFaltam, proxIdx, numAtrasadas, valorAtrasado, ultimaParcela, juros } = calcDivida(d);
   const quitada = isQuitada(d);
 
   let proximaLabel = '—', proximaVal = '—';
@@ -527,34 +796,37 @@ function renderDashboard(content, d) {
     proximaVal = 'Dívida encerrada';
   }
 
+  const previsaoLabel = quitada
+    ? '🎉 Quitado'
+    : (ultimaParcela ? `${ultimaParcela.mes}/${ultimaParcela.ano}` : '—');
+
   content.innerHTML = `
     <div class="dashboard-header">
       <div>
-        <h2 class="dashboard-title">
-          ${d.titulo}
-          <button class="btn-edit-titulo" id="btn-edit-titulo" title="Editar título">✏️</button>
-        </h2>
+        <h2 class="dashboard-title">${d.titulo}</h2>
         <div class="dashboard-badge">${periodoTexto(d)} · ${d.parcelas.length} parcelas</div>
+        ${numAtrasadas > 0 ? `<div class="dashboard-badge badge-atraso">⚠️ ${numAtrasadas} parcela${numAtrasadas !== 1 ? 's' : ''} atrasada${numAtrasadas !== 1 ? 's' : ''} · R$ ${valorAtrasado.toLocaleString('pt-BR')}</div>` : ''}
       </div>
       <div class="dashboard-actions">
         ${quitada ? `<button class="btn-back" id="btn-voltar-quitadas">← Voltar para Quitadas</button>` : ''}
+        <button class="btn-secondary" id="btn-editar-divida" title="Editar dívida inteira">✏️ Editar Dívida</button>
         <button class="btn-secondary" id="btn-add-parcela" title="Adicionar parcela extra">+ Parcela</button>
         <button class="btn-delete" id="btn-delete-divida" title="Excluir dívida">🗑</button>
       </div>
     </div>
 
     <div class="stats-grid">
-      <div class="stat-card green">
+      <div class="stat-card blue">
         <div class="stat-label">Valor Total da Dívida</div>
         <div class="stat-value">R$ ${total.toLocaleString('pt-BR')}</div>
         <div class="stat-sub">${d.parcelas.length} parcelas</div>
       </div>
-      <div class="stat-card blue">
+      <div class="stat-card green">
         <div class="stat-label">Já Descontado</div>
         <div class="stat-value">R$ ${descontado.toLocaleString('pt-BR')}</div>
         <div class="stat-sub">${numPagas} parcela${numPagas !== 1 ? 's' : ''} paga${numPagas !== 1 ? 's' : ''}</div>
       </div>
-      <div class="stat-card pink">
+      <div class="stat-card blue">
         <div class="stat-label">Saldo Restante</div>
         <div class="stat-value">R$ ${restante.toLocaleString('pt-BR')}</div>
         <div class="stat-sub">${numFaltam} parcela${numFaltam !== 1 ? 's' : ''} restante${numFaltam !== 1 ? 's' : ''}</div>
@@ -564,6 +836,17 @@ function renderDashboard(content, d) {
         <div class="stat-value">${proximaLabel}</div>
         <div class="stat-sub">${proximaVal}</div>
       </div>
+      <div class="stat-card blue">
+        <div class="stat-label">Previsão de Quitação</div>
+        <div class="stat-value">${previsaoLabel}</div>
+        <div class="stat-sub">${quitada ? 'dívida encerrada' : 'último mês previsto'}</div>
+      </div>
+      ${juros !== null ? `
+      <div class="stat-card pink">
+        <div class="stat-label">Juros / Acréscimo</div>
+        <div class="stat-value">R$ ${juros.toLocaleString('pt-BR')}</div>
+        <div class="stat-sub">sobre o valor original de R$ ${d.valorOriginal.toLocaleString('pt-BR')}</div>
+      </div>` : ''}
     </div>
 
     <div class="progress-section">
@@ -656,7 +939,7 @@ function renderDashboard(content, d) {
 
   document.getElementById('btn-delete-divida').addEventListener('click', () => excluirDivida(d.id));
   document.getElementById('btn-add-parcela').addEventListener('click', () => openAddParcelaModal(d.id));
-  document.getElementById('btn-edit-titulo').addEventListener('click', () => openEditTituloModal(d.id));
+  document.getElementById('btn-editar-divida').addEventListener('click', () => openEditDividaModal(d.id));
 }
 
 function renderParcelasGrid(d) {
@@ -667,12 +950,14 @@ function renderParcelasGrid(d) {
   d.parcelas.forEach((p, i) => {
     const isGratuita = p.valor === 0;
     const isFinal    = i === ultimoIdx && d.parcelas.length > 1;
+    const atrasada   = isAtrasada(p);
     const card = document.createElement('div');
-    card.className = `parcela-card ${p.paga ? 'pago' : 'pendente'}`;
+    card.className = `parcela-card ${p.paga ? 'pago' : 'pendente'} ${atrasada ? 'atrasada' : ''}`;
     card.style.animation = `fadeUp .5s ease ${0.35 + i * 0.05}s both`;
 
     const valorLabel = isGratuita ? 'R$ 0,00' : `R$ ${p.valor.toLocaleString('pt-BR')}`;
     const subLabel = isGratuita ? 'sem desconto' : (isFinal ? 'parcela final' : 'mensal');
+    const statusLabel = p.paga ? '✓ Pago' : (atrasada ? '⚠ Atrasada' : '○ Pendente');
 
     card.innerHTML = `
       <button class="parcela-edit-btn" title="Editar valor desta parcela">✏️</button>
@@ -681,7 +966,7 @@ function renderParcelasGrid(d) {
         ${valorLabel}
         <small>${subLabel}</small>
       </div>
-      <div class="parcela-status">${p.paga ? '✓ Pago' : '○ Pendente'}</div>
+      <div class="parcela-status">${statusLabel}</div>
       <div class="check-icon">✓</div>
       <div class="parcela-number">#${String(i + 1).padStart(2, '0')}</div>
     `;
@@ -704,15 +989,17 @@ async function toggleParcela(dividaId, idx, card) {
 
   const p = d.parcelas[idx];
   const novoValor = !p.paga;
+  const pagoEm = novoValor ? new Date().toISOString() : null;
 
   const { error } = await supabaseClient
     .from('parcelas')
-    .update({ paga: novoValor })
+    .update({ paga: novoValor, pago_em: pagoEm })
     .eq('id', p.id);
 
   if (error) { showToast('Erro ao salvar: ' + error.message); return; }
 
   p.paga = novoValor;
+  p.pago_em = pagoEm;
 
   const ficouQuitada = isQuitada(d);
 
@@ -815,6 +1102,7 @@ function openModal() {
   document.getElementById('input-meses').value = '';
   document.getElementById('input-valor-total').value = '';
   document.getElementById('input-valor-mensal').value = '';
+  document.getElementById('input-valor-original').value = '';
 
   setModoNovaDivida('meses');
 
@@ -837,9 +1125,14 @@ async function criarNovaDivida() {
   const titulo = document.getElementById('input-titulo').value.trim();
   const mesInicial = parseInt(document.getElementById('input-mes-inicial').value, 10);
   const anoInicial  = parseInt(document.getElementById('input-ano-inicial').value, 10);
+  const valorOriginalRaw = document.getElementById('input-valor-original').value;
+  const valorOriginalInput = valorOriginalRaw === '' ? null : parseFloat(valorOriginalRaw);
 
   if (!titulo) { showToast('Digite um título para a dívida'); return; }
   if (isNaN(anoInicial)) { showToast('Digite o ano inicial'); return; }
+  if (valorOriginalInput !== null && (isNaN(valorOriginalInput) || valorOriginalInput < 0)) {
+    showToast('Digite um valor original válido'); return;
+  }
 
   let valoresParcelas = [];
 
@@ -863,7 +1156,7 @@ async function criarNovaDivida() {
 
   const { data: novaDividaRow, error: errDivida } = await supabaseClient
     .from('dividas')
-    .insert({ titulo, user_id: currentUser.id })
+    .insert({ titulo, user_id: currentUser.id, valor_original: valorOriginalInput })
     .select()
     .single();
 
@@ -894,7 +1187,8 @@ async function criarNovaDivida() {
   const novaDivida = {
     id: novaDividaRow.id,
     titulo: novaDividaRow.titulo,
-    parcelas: parcelasInseridas.slice().sort((a, b) => a.ordem - b.ordem),
+    valorOriginal: novaDividaRow.valor_original,
+    parcelas: ordenarParcelas(parcelasInseridas),
   };
 
   dividas.push(novaDivida);
@@ -913,6 +1207,11 @@ function openEditParcelaModal(dividaId, idx) {
   if (!d) return;
   const p = d.parcelas[idx];
   parcelaEmEdicao = { dividaId, idx };
+
+  const selectMes = document.getElementById('input-edit-mes');
+  selectMes.innerHTML = MESES.map((m, i) => `<option value="${i}">${m}</option>`).join('');
+  selectMes.value = MESES.indexOf(p.mes);
+  document.getElementById('input-edit-ano').value = p.ano;
 
   document.getElementById('edit-parcela-info').textContent = `${p.mes} /${p.ano}`;
   document.getElementById('input-edit-valor').value = p.valor;
@@ -933,20 +1232,30 @@ async function salvarEdicaoParcela() {
   const p = d.parcelas[idx];
 
   const novoValor = parseFloat(document.getElementById('input-edit-valor').value);
+  const novoMesIdx = parseInt(document.getElementById('input-edit-mes').value, 10);
+  const novoAno = parseInt(document.getElementById('input-edit-ano').value, 10);
+
   if (isNaN(novoValor) || novoValor < 0) { showToast('Digite um valor válido'); return; }
+  if (isNaN(novoAno)) { showToast('Digite um ano válido'); return; }
+
+  const novoMes = MESES[novoMesIdx];
 
   const { error } = await supabaseClient
     .from('parcelas')
-    .update({ valor: novoValor })
+    .update({ valor: novoValor, mes: novoMes, ano: novoAno })
     .eq('id', p.id);
 
   if (error) { showToast('Erro ao salvar: ' + error.message); return; }
 
   p.valor = novoValor;
+  p.mes = novoMes;
+  p.ano = novoAno;
+  d.parcelas = ordenarParcelas(d.parcelas);
+
   closeEditParcelaModal();
   renderTabs();
   renderContent();
-  showToast(`Valor de ${p.mes} atualizado para R$ ${novoValor.toLocaleString('pt-BR')}`);
+  showToast(`Parcela atualizada: ${novoMes}/${novoAno} — R$ ${novoValor.toLocaleString('pt-BR')}`);
 }
 
 async function excluirParcela() {
@@ -1040,7 +1349,7 @@ async function salvarNovaParcela() {
   if (error) { showToast('Erro ao adicionar parcela: ' + error.message); return; }
 
   d.parcelas.push(parcelaInserida);
-  d.parcelas.sort((a, b) => a.ordem - b.ordem);
+  d.parcelas = ordenarParcelas(d.parcelas);
 
   closeAddParcelaModal();
   renderTabs();
@@ -1048,43 +1357,208 @@ async function salvarNovaParcela() {
   showToast(`Parcela de ${MESES[mesIdx]}/${ano} adicionada — tudo reajustado automaticamente`);
 }
 
-/* ── Modal: editar título da dívida ── */
-let dividaEmEdicaoTitulo = null;
+/* ── Modal: editar dívida inteira (título, valor original, data de início e parcelas) ── */
+let dividaEmEdicaoCompleta = null;
 
-function openEditTituloModal(dividaId) {
+function openEditDividaModal(dividaId) {
   const d = dividas.find(x => x.id === dividaId);
   if (!d) return;
-  dividaEmEdicaoTitulo = dividaId;
-  document.getElementById('input-edit-titulo').value = d.titulo;
-  document.getElementById('edit-titulo-overlay').classList.add('show');
-  document.getElementById('input-edit-titulo').focus();
+  dividaEmEdicaoCompleta = dividaId;
+
+  document.getElementById('input-ed-titulo').value = d.titulo;
+  document.getElementById('input-ed-valor-original').value = d.valorOriginal ?? '';
+
+  const selectMes = document.getElementById('input-ed-mes-inicial');
+  selectMes.innerHTML = MESES.map((m, i) => `<option value="${i}">${m}</option>`).join('');
+
+  if (d.parcelas.length) {
+    const primeira = d.parcelas[0];
+    selectMes.value = MESES.indexOf(primeira.mes);
+    document.getElementById('input-ed-ano-inicial').value = primeira.ano;
+  } else {
+    const hoje = new Date();
+    selectMes.value = hoje.getMonth();
+    document.getElementById('input-ed-ano-inicial').value = hoje.getFullYear();
+  }
+
+  renderEdParcelasList(d);
+
+  document.getElementById('edit-divida-overlay').classList.add('show');
+  document.getElementById('input-ed-titulo').focus();
 }
 
-function closeEditTituloModal() {
-  document.getElementById('edit-titulo-overlay').classList.remove('show');
-  dividaEmEdicaoTitulo = null;
+function closeEditDividaModal() {
+  document.getElementById('edit-divida-overlay').classList.remove('show');
+  dividaEmEdicaoCompleta = null;
 }
 
-async function salvarEditTitulo() {
-  if (!dividaEmEdicaoTitulo) return;
-  const d = dividas.find(x => x.id === dividaEmEdicaoTitulo);
+/* desenha a lista de parcelas dentro da modal, cada uma com edição inline de valor */
+function renderEdParcelasList(d) {
+  const list = document.getElementById('ed-parcelas-list');
+
+  if (!d.parcelas.length) {
+    list.innerHTML = `<div class="ed-parcelas-empty">Nenhuma parcela cadastrada.</div>`;
+    return;
+  }
+
+  list.innerHTML = d.parcelas.map((p, i) => `
+    <div class="ed-parcela-row" data-idx="${i}">
+      <div class="ed-parcela-data">${p.mes.slice(0, 3)}<span>/${String(p.ano).slice(2)}</span></div>
+      <div class="ed-parcela-status ${p.paga ? 'pago' : ''}">${p.paga ? '✓ pago' : '○ pendente'}</div>
+      <div class="ed-parcela-valor-view">R$ ${p.valor.toLocaleString('pt-BR')}</div>
+      <input type="number" class="ed-parcela-valor-input" min="0" step="0.01" value="${p.valor}" style="display:none" />
+      <div class="ed-parcela-actions">
+        <button class="ed-parcela-btn ed-parcela-edit" title="Editar valor desta parcela">✏️</button>
+        <button class="ed-parcela-btn ed-parcela-confirm" title="Salvar" style="display:none">✓</button>
+        <button class="ed-parcela-btn ed-parcela-cancel" title="Cancelar" style="display:none">✕</button>
+        <button class="ed-parcela-btn ed-parcela-del" title="Excluir parcela">🗑</button>
+      </div>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('.ed-parcela-row').forEach(row => {
+    const idx = parseInt(row.dataset.idx, 10);
+    const viewEl     = row.querySelector('.ed-parcela-valor-view');
+    const inputEl    = row.querySelector('.ed-parcela-valor-input');
+    const editBtn    = row.querySelector('.ed-parcela-edit');
+    const confirmBtn = row.querySelector('.ed-parcela-confirm');
+    const cancelBtn  = row.querySelector('.ed-parcela-cancel');
+    const delBtn     = row.querySelector('.ed-parcela-del');
+
+    const entrarModoEdicao = () => {
+      viewEl.style.display = 'none';
+      inputEl.style.display = 'block';
+      editBtn.style.display = 'none';
+      confirmBtn.style.display = 'inline-flex';
+      cancelBtn.style.display = 'inline-flex';
+      inputEl.focus();
+      inputEl.select();
+    };
+
+    const sairModoEdicao = () => {
+      viewEl.style.display = 'block';
+      inputEl.style.display = 'none';
+      editBtn.style.display = 'inline-flex';
+      confirmBtn.style.display = 'none';
+      cancelBtn.style.display = 'none';
+    };
+
+    editBtn.addEventListener('click', entrarModoEdicao);
+
+    cancelBtn.addEventListener('click', () => {
+      inputEl.value = d.parcelas[idx].valor;
+      sairModoEdicao();
+    });
+
+    confirmBtn.addEventListener('click', () => salvarValorParcelaInline(d.id, idx, inputEl.value));
+
+    inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') salvarValorParcelaInline(d.id, idx, inputEl.value);
+      if (e.key === 'Escape') cancelBtn.click();
+    });
+
+    delBtn.addEventListener('click', () => excluirParcelaInline(d.id, idx));
+  });
+}
+
+/* salva na hora o valor de UMA parcela específica, sem precisar do botão "Salvar Alterações" */
+async function salvarValorParcelaInline(dividaId, idx, valorRaw) {
+  const d = dividas.find(x => x.id === dividaId);
   if (!d) return;
+  const p = d.parcelas[idx];
 
-  const novoTitulo = document.getElementById('input-edit-titulo').value.trim();
-  if (!novoTitulo) { showToast('Digite um título válido'); return; }
+  const novoValor = parseFloat(valorRaw);
+  if (isNaN(novoValor) || novoValor < 0) { showToast('Digite um valor válido'); return; }
 
-  const { error } = await supabaseClient
-    .from('dividas')
-    .update({ titulo: novoTitulo })
-    .eq('id', d.id);
+  const { error } = await supabaseClient.from('parcelas').update({ valor: novoValor }).eq('id', p.id);
+  if (error) { showToast('Erro ao salvar parcela: ' + error.message); return; }
 
-  if (error) { showToast('Erro ao renomear dívida: ' + error.message); return; }
-
-  d.titulo = novoTitulo;
-  closeEditTituloModal();
+  p.valor = novoValor;
+  renderEdParcelasList(d);
   renderTabs();
   renderContent();
-  showToast('Título atualizado com sucesso!');
+  showToast(`Parcela de ${p.mes}/${p.ano} atualizada para R$ ${novoValor.toLocaleString('pt-BR')}`);
+}
+
+async function excluirParcelaInline(dividaId, idx) {
+  const d = dividas.find(x => x.id === dividaId);
+  if (!d) return;
+  const p = d.parcelas[idx];
+
+  const ok = confirm(`Excluir a parcela de ${p.mes}/${p.ano}? Essa ação não pode ser desfeita.`);
+  if (!ok) return;
+
+  const { error } = await supabaseClient.from('parcelas').delete().eq('id', p.id);
+  if (error) { showToast('Erro ao excluir parcela: ' + error.message); return; }
+
+  d.parcelas.splice(idx, 1);
+  renderEdParcelasList(d);
+  renderTabs();
+  renderContent();
+  showToast(`Parcela de ${p.mes}/${p.ano} excluída`);
+}
+
+/* salva título, valor original e (se alterada) a data de início — desloca todas as parcelas */
+async function salvarEditDivida() {
+  if (!dividaEmEdicaoCompleta) return;
+  const d = dividas.find(x => x.id === dividaEmEdicaoCompleta);
+  if (!d) return;
+
+  const novoTitulo = document.getElementById('input-ed-titulo').value.trim();
+  if (!novoTitulo) { showToast('Digite um título válido'); return; }
+
+  const valorOriginalRaw = document.getElementById('input-ed-valor-original').value;
+  const novoValorOriginal = valorOriginalRaw === '' ? null : parseFloat(valorOriginalRaw);
+  if (novoValorOriginal !== null && (isNaN(novoValorOriginal) || novoValorOriginal < 0)) {
+    showToast('Digite um valor original válido'); return;
+  }
+
+  const { error: errDivida } = await supabaseClient
+    .from('dividas')
+    .update({ titulo: novoTitulo, valor_original: novoValorOriginal })
+    .eq('id', d.id);
+
+  if (errDivida) { showToast('Erro ao salvar dívida: ' + errDivida.message); return; }
+
+  d.titulo = novoTitulo;
+  d.valorOriginal = novoValorOriginal;
+
+  if (d.parcelas.length) {
+    const novoMesIdx = parseInt(document.getElementById('input-ed-mes-inicial').value, 10);
+    const novoAno = parseInt(document.getElementById('input-ed-ano-inicial').value, 10);
+
+    if (!isNaN(novoAno)) {
+      const primeira = d.parcelas[0];
+      const deltaMeses = (novoAno * 12 + novoMesIdx) - (primeira.ano * 12 + MESES.indexOf(primeira.mes));
+
+      if (deltaMeses !== 0) {
+        const atualizacoes = d.parcelas.map(p => {
+          const chaveAtual = p.ano * 12 + MESES.indexOf(p.mes) + deltaMeses;
+          const novoAnoP = Math.floor(chaveAtual / 12);
+          const novoMesP = MESES[chaveAtual % 12];
+          return { p, novoAnoP, novoMesP };
+        });
+
+        const resultados = await Promise.all(atualizacoes.map(({ p, novoAnoP, novoMesP }) =>
+          supabaseClient.from('parcelas').update({ mes: novoMesP, ano: novoAnoP }).eq('id', p.id)
+        ));
+
+        const algumErro = resultados.find(r => r.error);
+        if (algumErro) { showToast('Erro ao atualizar datas: ' + algumErro.error.message); return; }
+
+        atualizacoes.forEach(({ p, novoAnoP, novoMesP }) => {
+          p.ano = novoAnoP;
+          p.mes = novoMesP;
+        });
+        d.parcelas = ordenarParcelas(d.parcelas);
+      }
+    }
+  }
+
+  closeEditDividaModal();
+  renderTabs();
+  renderContent();
+  showToast(`Dívida "${d.titulo}" atualizada com sucesso!`);
 }
 
 /* ── Listeners globais ── */
@@ -1112,10 +1586,10 @@ document.getElementById('add-parcela-overlay').addEventListener('click', (e) => 
   if (e.target.id === 'add-parcela-overlay') closeAddParcelaModal();
 });
 
-document.getElementById('btn-cancelar-edit-titulo').addEventListener('click', closeEditTituloModal);
-document.getElementById('btn-salvar-edit-titulo').addEventListener('click', salvarEditTitulo);
-document.getElementById('edit-titulo-overlay').addEventListener('click', (e) => {
-  if (e.target.id === 'edit-titulo-overlay') closeEditTituloModal();
+document.getElementById('btn-cancelar-edit-divida').addEventListener('click', closeEditDividaModal);
+document.getElementById('btn-salvar-edit-divida').addEventListener('click', salvarEditDivida);
+document.getElementById('edit-divida-overlay').addEventListener('click', (e) => {
+  if (e.target.id === 'edit-divida-overlay') closeEditDividaModal();
 });
 
 document.getElementById('btn-auth-confirmar').addEventListener('click', () => {
@@ -1135,6 +1609,10 @@ document.getElementById('btn-logout').addEventListener('click', fazerLogout);
 document.getElementById('btn-perfil').addEventListener('click', showPerfilView);
 document.getElementById('btn-voltar-dividas').addEventListener('click', showDividasView);
 document.getElementById('btn-salvar-perfil').addEventListener('click', salvarPerfil);
+
+/* ── Visão Geral ── */
+document.getElementById('btn-geral').addEventListener('click', showGeralView);
+document.getElementById('btn-voltar-dividas-geral').addEventListener('click', showDividasView);
 
 document.getElementById('select-perfil-profissao').addEventListener('change', (e) => {
   const inputOutra = document.getElementById('input-perfil-profissao-outra');

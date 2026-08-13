@@ -44,6 +44,7 @@
     </div>
     <div class="header-right">
       <span class="header-user-email" id="header-user-email"></span>
+      <button class="btn-back" id="btn-geral">📊 Geral</button>
       <button class="btn-back" id="btn-perfil">👤 Perfil</button>
       <button class="btn-back" id="btn-logout">Sair</button>
     </div>
@@ -53,6 +54,20 @@
   <div id="view-dividas">
     <div class="tab-bar" id="tab-bar"></div>
     <div id="app-content"></div>
+  </div>
+
+  <!-- View: Visão Geral -->
+  <div id="view-geral" style="display:none;">
+    <div class="dashboard-header">
+      <div>
+        <h2 class="dashboard-title">Visão Geral</h2>
+        <div class="dashboard-badge">Todas as suas dívidas em um só lugar</div>
+      </div>
+      <div class="dashboard-actions">
+        <button class="btn-back" id="btn-voltar-dividas-geral">← Voltar para Dívidas</button>
+      </div>
+    </div>
+    <div id="geral-content"></div>
   </div>
 
   <!-- View: Perfil -->
@@ -145,6 +160,9 @@
       </div>
     </div>
 
+    <label class="modal-label">Valor original antes dos juros (R$) — opcional</label>
+    <input type="number" id="input-valor-original" class="modal-input" placeholder="Deixe em branco se não houver juros" min="0" step="0.01" />
+
     <div class="modal-actions">
       <button class="btn-secondary" id="btn-cancelar-modal">Cancelar</button>
       <button class="btn-primary" id="btn-criar-divida">Criar Dívida</button>
@@ -157,6 +175,17 @@
   <div class="modal">
     <div class="modal-title">Editar Parcela</div>
     <div class="edit-parcela-info" id="edit-parcela-info"></div>
+
+    <div class="modal-row">
+      <div class="modal-col">
+        <label class="modal-label">Mês</label>
+        <select id="input-edit-mes" class="modal-input"></select>
+      </div>
+      <div class="modal-col">
+        <label class="modal-label">Ano</label>
+        <input type="number" id="input-edit-ano" class="modal-input" step="1" />
+      </div>
+    </div>
 
     <label class="modal-label">Novo valor da parcela (R$)</label>
     <input type="number" id="input-edit-valor" class="modal-input" min="0" step="0.01" />
@@ -201,17 +230,38 @@
   </div>
 </div>
 
-<!-- Modal: editar título da dívida -->
-<div class="modal-overlay" id="edit-titulo-overlay">
-  <div class="modal">
+<!-- Modal: editar dívida inteira (título, valor original, data de início e parcelas) -->
+<div class="modal-overlay" id="edit-divida-overlay">
+  <div class="modal modal-lg">
     <div class="modal-title">Editar Dívida</div>
 
     <label class="modal-label">Título da dívida</label>
-    <input type="text" id="input-edit-titulo" class="modal-input" placeholder="Ex: Financiamento do Carro" />
+    <input type="text" id="input-ed-titulo" class="modal-input" placeholder="Ex: Financiamento do Carro" />
+
+    <div class="modal-row">
+      <div class="modal-col">
+        <label class="modal-label">Mês inicial</label>
+        <select id="input-ed-mes-inicial" class="modal-input"></select>
+      </div>
+      <div class="modal-col">
+        <label class="modal-label">Ano inicial</label>
+        <input type="number" id="input-ed-ano-inicial" class="modal-input" step="1" />
+      </div>
+    </div>
+    <p class="modal-hint">Alterar a data de início desloca <strong>todas as parcelas</strong>, mantendo valores e status de pagamento.</p>
+
+    <label class="modal-label">Valor original antes dos juros (R$) — opcional</label>
+    <input type="number" id="input-ed-valor-original" class="modal-input" placeholder="Deixe em branco se não houver juros" min="0" step="0.01" />
+
+    <div class="ed-parcelas-section">
+      <label class="modal-label">Parcelas desta dívida</label>
+      <p class="modal-hint">Clique no ✏️ de uma parcela pra mudar só o valor dela — é salvo na hora.</p>
+      <div class="ed-parcelas-list" id="ed-parcelas-list"></div>
+    </div>
 
     <div class="modal-actions">
-      <button class="btn-secondary" id="btn-cancelar-edit-titulo">Cancelar</button>
-      <button class="btn-primary" id="btn-salvar-edit-titulo">Salvar</button>
+      <button class="btn-secondary" id="btn-cancelar-edit-divida">Fechar</button>
+      <button class="btn-primary" id="btn-salvar-edit-divida">Salvar Alterações</button>
     </div>
   </div>
 </div>
