@@ -116,6 +116,9 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
     dividas = [];
     activeTabId = null;
     perfilAtual = null;
+    notificacoesLidas = new Set();
+    notificacoesAtuais = [];
+    fecharPainelNotificacoes();
     showAuthScreen();
   }
 });
@@ -182,9 +185,11 @@ function atualizarTelaAuth() {
 async function iniciarApp() {
   await loadDividas();
   await loadPerfil();
+  await loadNotificacoesLidas();
   activeTabId = dividas.length ? dividas[0].id : null;
   renderTabs();
   renderContent();
+  atualizarBadgeENotificacoes();
 }
 
 async function loadDividas() {
@@ -205,6 +210,239 @@ async function loadDividas() {
     valorOriginal: d.valor_original,
     parcelas: ordenarParcelas(d.parcelas || []),
   }));
+}
+
+/* ============================================================
+   SISTEMA DE ALERTAS / CENTRAL DE NOTIFICAÇÕES
+   ============================================================
+   As notificações não são registros salvos no banco — elas são
+   recalculadas a partir do estado real de `dividas` toda vez que
+   algo muda (mesma fonte de verdade usada no dashboard e no
+   histórico). Só o status de LEITURA é persistido, por uma chave
+   determinística baseada no conteúdo da notificação: se as
+   parcelas envolvidas mudarem, a chave muda e a notificação volta
+   a aparecer como não lida — sem precisar reenviar alerta manual
+   nem duplicar dados de dívidas/parcelas numa tabela separada.
+   ============================================================ */
+
+let notificacoesLidas = new Set();   // chaves já lidas (persistidas em notificacoes_lidas)
+let notificacoesAtuais = [];         // última lista computada
+let painelNotificacoesAberto = false;
+
+const LIMIAR_VENCIMENTO_DIAS = 7; // cobre as 3 faixas: hoje, 1-3 dias, 4-7 dias
+
+/* hash curto e estável (djb2) — usado só pra manter a chave de leitura compacta */
+function hashChave(str) {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
+/* dias até o vencimento da parcela. A estrutura atual não guarda um dia exato —
+   só mês/ano — então parcelas do mês corrente (ainda não atrasadas) são tratadas
+   como "vencendo agora" (crítico), e só a partir do próximo mês dá pra calcular
+   uma distância em dias real, usando o 1º dia do mês como referência (mesma
+   convenção já usada no dashboard e no histórico) */
+function diasParaVencimento(p) {
+  const { mesIdx: mesAtual, ano: anoAtual } = hojeInfo();
+  if (p.ano === anoAtual && MESES.indexOf(p.mes) === mesAtual) return 0;
+
+  const hoje = new Date();
+  const hojeSemHora = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+  const dataRef = new Date(p.ano, MESES.indexOf(p.mes), 1);
+  return Math.round((dataRef - hojeSemHora) / 86400000);
+}
+
+/* monta a lista de notificações atuais a partir do estado real das dívidas */
+function gerarNotificacoes() {
+  const notifs = [];
+
+  /* 1. Parcelas atrasadas — agrupadas numa única notificação */
+  const atrasadas = [];
+  dividas.forEach(d => d.parcelas.forEach(p => { if (isAtrasada(p)) atrasadas.push({ d, p }); }));
+  if (atrasadas.length) {
+    const total = atrasadas.reduce((s, x) => s + x.p.valor, 0);
+    const idsUnicos = new Set(atrasadas.map(x => x.d.id));
+    notifs.push({
+      chave: `atrasadas:${hashChave(atrasadas.map(x => x.p.id).sort().join(','))}`,
+      cor: 'red',
+      icone: '🔴',
+      titulo: `Você possui ${atrasadas.length} parcela${atrasadas.length !== 1 ? 's' : ''} atrasada${atrasadas.length !== 1 ? 's' : ''}`,
+      subtitulo: `Total atrasado: R$ ${total.toLocaleString('pt-BR')}`,
+      acao: () => (idsUnicos.size === 1 ? irParaDivida(atrasadas[0].d.id) : showGeralView()),
+    });
+  }
+
+  /* 2. Próximos vencimentos — só parcelas não pagas e não atrasadas, por faixa de urgência */
+  const pendentes = [];
+  dividas.forEach(d => d.parcelas.forEach(p => {
+    if (p.paga || isAtrasada(p)) return;
+    const dias = diasParaVencimento(p);
+    if (dias >= 0 && dias <= LIMIAR_VENCIMENTO_DIAS) pendentes.push({ d, p, dias });
+  }));
+
+  const faixas = [
+    { id: 'hoje',    min: 0, max: 0, cor: 'red',    icone: '🔴' },
+    { id: 'atencao', min: 1, max: 3, cor: 'yellow', icone: '🟡' },
+    { id: 'aviso',   min: 4, max: 7, cor: 'orange', icone: '🟠' },
+  ];
+
+  faixas.forEach(faixa => {
+    const grupo = pendentes.filter(x => x.dias >= faixa.min && x.dias <= faixa.max);
+    if (!grupo.length) return;
+
+    const idsUnicos = new Set(grupo.map(x => x.d.id));
+    const totalGrupo = grupo.reduce((s, x) => s + x.p.valor, 0);
+
+    let titulo;
+    if (grupo.length === 1) {
+      titulo = grupo[0].dias === 0 ? '1 parcela vence este mês' : `1 parcela vence em ${grupo[0].dias} dia${grupo[0].dias !== 1 ? 's' : ''}`;
+    } else {
+      titulo = faixa.id === 'hoje'
+        ? `${grupo.length} parcelas vencem este mês`
+        : `${grupo.length} parcelas vencem nos próximos ${faixa.max} dias`;
+    }
+
+    notifs.push({
+      chave: `vencimento_${faixa.id}:${hashChave(grupo.map(x => x.p.id).sort().join(','))}`,
+      cor: faixa.cor,
+      icone: faixa.icone,
+      titulo,
+      subtitulo: grupo.length === 1
+        ? `${grupo[0].d.titulo} · R$ ${grupo[0].p.valor.toLocaleString('pt-BR')}`
+        : `Total: R$ ${totalGrupo.toLocaleString('pt-BR')}`,
+      acao: () => (idsUnicos.size === 1 ? irParaDivida(grupo[0].d.id) : showGeralView()),
+    });
+  });
+
+  /* 3. Dívidas quitadas — uma notificação por dívida; some do não-lidos assim que
+        for marcada como lida, e só volta se a dívida "desquitar" e quitar de novo */
+  dividas.filter(isQuitada).forEach(d => {
+    notifs.push({
+      chave: `quitada:${d.id}`,
+      cor: 'green',
+      icone: '🟢',
+      titulo: `Você quitou "${d.titulo}"`,
+      subtitulo: 'Parabéns! Essa dívida foi totalmente paga 🎉',
+      acao: () => irParaDivida(d.id),
+    });
+  });
+
+  return notifs;
+}
+
+async function loadNotificacoesLidas() {
+  if (!currentUser) { notificacoesLidas = new Set(); return; }
+  const { data, error } = await supabaseClient
+    .from('notificacoes_lidas')
+    .select('chave');
+
+  if (error) {
+    // tabela pode ainda não existir num ambiente sem a migração — não trava o app
+    notificacoesLidas = new Set();
+    return;
+  }
+  notificacoesLidas = new Set((data || []).map(r => r.chave));
+}
+
+async function marcarComoLida(chave) {
+  if (notificacoesLidas.has(chave)) return;
+  notificacoesLidas.add(chave);
+  atualizarBadgeENotificacoes();
+
+  const { error } = await supabaseClient
+    .from('notificacoes_lidas')
+    .upsert({ user_id: currentUser.id, chave }, { onConflict: 'user_id,chave' });
+  if (error) console.error('Erro ao marcar notificação como lida:', error.message);
+}
+
+async function marcarTodasComoLidas() {
+  const naoLidas = notificacoesAtuais.filter(n => !notificacoesLidas.has(n.chave));
+  if (!naoLidas.length) return;
+
+  naoLidas.forEach(n => notificacoesLidas.add(n.chave));
+  atualizarBadgeENotificacoes();
+
+  const rows = naoLidas.map(n => ({ user_id: currentUser.id, chave: n.chave }));
+  const { error } = await supabaseClient.from('notificacoes_lidas').upsert(rows, { onConflict: 'user_id,chave' });
+  if (error) console.error('Erro ao marcar todas as notificações como lidas:', error.message);
+}
+
+/* recalcula as notificações, atualiza o badge do sino e, se o painel estiver
+   aberto, re-renderiza a lista — chamado sempre que dividas/parcelas mudam */
+function atualizarBadgeENotificacoes() {
+  notificacoesAtuais = gerarNotificacoes();
+  const naoLidas = notificacoesAtuais.filter(n => !notificacoesLidas.has(n.chave));
+
+  const badge = document.getElementById('notif-badge');
+  if (badge) {
+    if (naoLidas.length > 0) {
+      badge.textContent = naoLidas.length > 9 ? '9+' : String(naoLidas.length);
+      badge.style.display = 'flex';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+
+  if (painelNotificacoesAberto) renderPainelNotificacoes();
+}
+
+function renderPainelNotificacoes() {
+  const lista = document.getElementById('notif-panel-list');
+  if (!lista) return;
+
+  if (!notificacoesAtuais.length) {
+    lista.innerHTML = `<div class="notif-empty">Nenhuma notificação no momento 🎉</div>`;
+    return;
+  }
+
+  lista.innerHTML = notificacoesAtuais.map(n => {
+    const lida = notificacoesLidas.has(n.chave);
+    return `
+      <div class="notif-item ${n.cor} ${lida ? 'lida' : ''}" data-chave="${n.chave}">
+        <div class="notif-item-icone">${n.icone}</div>
+        <div class="notif-item-texto">
+          <div class="notif-item-titulo">${n.titulo}</div>
+          <div class="notif-item-sub">${n.subtitulo}</div>
+        </div>
+        ${!lida ? `<button class="notif-item-marcar" data-chave="${n.chave}" title="Marcar como lida">✓</button>` : ''}
+      </div>`;
+  }).join('');
+
+  lista.querySelectorAll('.notif-item').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.notif-item-marcar')) return;
+      const n = notificacoesAtuais.find(x => x.chave === el.dataset.chave);
+      if (!n) return;
+      marcarComoLida(n.chave);
+      fecharPainelNotificacoes();
+      n.acao();
+    });
+  });
+
+  lista.querySelectorAll('.notif-item-marcar').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      marcarComoLida(btn.dataset.chave);
+    });
+  });
+}
+
+function abrirPainelNotificacoes() {
+  painelNotificacoesAberto = true;
+  document.getElementById('notif-panel').classList.add('show');
+  renderPainelNotificacoes();
+}
+
+function fecharPainelNotificacoes() {
+  painelNotificacoesAberto = false;
+  const painel = document.getElementById('notif-panel');
+  if (painel) painel.classList.remove('show');
+}
+
+function toggleNotificacoes() {
+  if (painelNotificacoesAberto) fecharPainelNotificacoes();
+  else abrirPainelNotificacoes();
 }
 
 /* ============================================================
@@ -1651,13 +1889,14 @@ async function toggleParcela(dividaId, idx, card) {
 
   const valorMsg = p.valor === 0 ? 'mês sem desconto' : `R$ ${p.valor.toLocaleString('pt-BR')} descontados`;
   if (p.paga && ficouQuitada) {
-    showToast(`🎉 "${d.titulo}" foi totalmente quitada!`);
+    showToast(`🎉 Parabéns! Dívida quitada — "${d.titulo}" foi totalmente paga!`);
   } else {
-    showToast(p.paga ? `${p.mes} marcado como pago — ${valorMsg}!` : `↩️ ${p.mes} desmarcado`);
+    showToast(p.paga ? `Parcela marcada como paga — ${p.mes} (${valorMsg})` : `↩️ ${p.mes} desmarcado`);
   }
 
   renderTabs();
   renderContent();
+  atualizarBadgeENotificacoes();
 }
 
 /* ── Excluir dívida ── */
@@ -1674,6 +1913,7 @@ async function excluirDivida(id) {
   activeTabId = dividas.length ? dividas[0].id : null;
   renderTabs();
   renderContent();
+  atualizarBadgeENotificacoes();
   showToast(`Dívida "${d.titulo}" excluída`);
 }
 
@@ -1838,6 +2078,7 @@ async function criarNovaDivida() {
   closeModal();
   renderTabs();
   renderContent();
+  atualizarBadgeENotificacoes();
   showToast(`Dívida "${titulo}" criada com sucesso! (${valoresParcelas.length} parcelas)`);
 }
 
@@ -1906,6 +2147,7 @@ async function salvarEdicaoParcela() {
   renderTabs();
   renderContent();
   refreshViewAtual();
+  atualizarBadgeENotificacoes();
   showToast(`Parcela atualizada: ${novoMes}/${novoAno} — R$ ${novoValor.toLocaleString('pt-BR')}`);
 }
 
@@ -1927,6 +2169,7 @@ async function excluirParcela() {
   renderTabs();
   renderContent();
   refreshViewAtual();
+  atualizarBadgeENotificacoes();
   showToast(`Parcela de ${p.mes}/${p.ano} excluída`);
 }
 
@@ -2007,6 +2250,7 @@ async function salvarNovaParcela() {
   closeAddParcelaModal();
   renderTabs();
   renderContent();
+  atualizarBadgeENotificacoes();
   showToast(`Parcela de ${MESES[mesIdx]}/${ano} adicionada — tudo reajustado automaticamente`);
 }
 
@@ -2130,6 +2374,7 @@ async function salvarValorParcelaInline(dividaId, idx, valorRaw) {
   renderEdParcelasList(d);
   renderTabs();
   renderContent();
+  atualizarBadgeENotificacoes();
   showToast(`Parcela de ${p.mes}/${p.ano} atualizada para R$ ${novoValor.toLocaleString('pt-BR')}`);
 }
 
@@ -2148,6 +2393,7 @@ async function excluirParcelaInline(dividaId, idx) {
   renderEdParcelasList(d);
   renderTabs();
   renderContent();
+  atualizarBadgeENotificacoes();
   showToast(`Parcela de ${p.mes}/${p.ano} excluída`);
 }
 
@@ -2211,6 +2457,7 @@ async function salvarEditDivida() {
   closeEditDividaModal();
   renderTabs();
   renderContent();
+  atualizarBadgeENotificacoes();
   showToast(`Dívida "${d.titulo}" atualizada com sucesso!`);
 }
 
@@ -2262,6 +2509,18 @@ document.getElementById('btn-logout').addEventListener('click', fazerLogout);
 document.getElementById('btn-perfil').addEventListener('click', showPerfilView);
 document.getElementById('btn-voltar-dividas').addEventListener('click', showDividasView);
 document.getElementById('btn-salvar-perfil').addEventListener('click', salvarPerfil);
+
+/* ── Central de Notificações ── */
+document.getElementById('btn-notificacoes').addEventListener('click', (e) => {
+  e.stopPropagation();
+  toggleNotificacoes();
+});
+document.getElementById('btn-marcar-todas-lidas').addEventListener('click', (e) => {
+  e.stopPropagation();
+  marcarTodasComoLidas();
+});
+document.getElementById('notif-panel').addEventListener('click', (e) => e.stopPropagation());
+document.addEventListener('click', () => { if (painelNotificacoesAberto) fecharPainelNotificacoes(); });
 
 /* ── Visão Geral ── */
 document.getElementById('btn-geral').addEventListener('click', showGeralView);
