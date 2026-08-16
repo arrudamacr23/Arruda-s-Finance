@@ -9,6 +9,7 @@ let dividas = [];
 let activeTabId = null;
 let currentUser = null;
 let perfilAtual = null; // { telefone, profissao, salario, foto_base64 }
+let metas = [];
 
 /* ── Estado vazio reutilizável (ícone + título + subtítulo + CTA opcional) ── */
 function emptyStateHtml({ icon = '📂', title, subtitle = '', ctaLabel = null, ctaId = null }) {
@@ -116,6 +117,7 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
     dividas = [];
     activeTabId = null;
     perfilAtual = null;
+    metas = [];
     notificacoesLidas = new Set();
     notificacoesAtuais = [];
     fecharPainelNotificacoes();
@@ -186,6 +188,7 @@ async function iniciarApp() {
   await loadDividas();
   await loadPerfil();
   await loadNotificacoesLidas();
+  await loadMetas();
   activeTabId = dividas.length ? dividas[0].id : null;
   renderTabs();
   renderContent();
@@ -721,6 +724,7 @@ function showDividasView() {
   document.getElementById('view-perfil').style.display = 'none';
   document.getElementById('view-geral').style.display = 'none';
   document.getElementById('view-historico').style.display = 'none';
+  document.getElementById('view-metas').style.display = 'none';
   fadeInView(document.getElementById('view-dividas'));
 }
 
@@ -729,6 +733,7 @@ function showPerfilView() {
   document.getElementById('view-perfil').style.display = 'block';
   document.getElementById('view-geral').style.display = 'none';
   document.getElementById('view-historico').style.display = 'none';
+  document.getElementById('view-metas').style.display = 'none';
   renderPerfilForm();
   renderResumoFinanceiro();
   fadeInView(document.getElementById('view-perfil'));
@@ -739,6 +744,7 @@ function showGeralView() {
   document.getElementById('view-perfil').style.display = 'none';
   document.getElementById('view-geral').style.display = 'block';
   document.getElementById('view-historico').style.display = 'none';
+  document.getElementById('view-metas').style.display = 'none';
   renderVisaoGeral();
   fadeInView(document.getElementById('view-geral'));
 }
@@ -748,8 +754,19 @@ function showHistoricoView() {
   document.getElementById('view-perfil').style.display = 'none';
   document.getElementById('view-geral').style.display = 'none';
   document.getElementById('view-historico').style.display = 'block';
+  document.getElementById('view-metas').style.display = 'none';
   renderHistorico();
   fadeInView(document.getElementById('view-historico'));
+}
+
+function showMetasView() {
+  document.getElementById('view-dividas').style.display = 'none';
+  document.getElementById('view-perfil').style.display = 'none';
+  document.getElementById('view-geral').style.display = 'none';
+  document.getElementById('view-historico').style.display = 'none';
+  document.getElementById('view-metas').style.display = 'block';
+  renderMetas();
+  fadeInView(document.getElementById('view-metas'));
 }
 
 /* soma, para cada uma das próximas `qtdMeses` (a partir do mês atual),
@@ -1232,6 +1249,322 @@ function renderVisaoGeral() {
   });
   const quitadasCard = document.getElementById('quitadas-resumo-card');
   if (quitadasCard) quitadasCard.addEventListener('click', () => irParaDivida('__quitadas__'));
+}
+
+/* ============================================================
+   METAS FINANCEIRAS
+   ============================================================
+   Meta "livre": valor_objetivo e valor_atual ficam salvos na
+   própria linha da tabela `metas` e são editados manualmente.
+
+   Meta "vinculada a uma dívida" (divida_id preenchido): objetivo
+   e valor atual NÃO são salvos — são calculados ao vivo a partir
+   de `calcDivida()`, igual ao resto do app já faz. Isso evita a
+   meta "dessincronizar" da dívida real quando uma parcela é paga.
+   ============================================================ */
+
+const CATEGORIAS_META = ['Dívida', 'Reserva de Emergência', 'Viagem', 'Casa', 'Educação', 'Saúde', 'Compra', 'Investimento'];
+
+let metaEmEdicao = null; // id da meta sendo editada, ou null pra criação
+let tipoMetaModal = 'livre'; // 'livre' | 'divida'
+
+async function loadMetas() {
+  const { data, error } = await supabaseClient
+    .from('metas')
+    .select('id, nome, descricao, categoria, prazo, divida_id, valor_objetivo, valor_atual, created_at')
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    // tabela pode ainda não existir num ambiente sem a migração — não trava o app
+    metas = [];
+    return;
+  }
+  metas = data || [];
+}
+
+/* progresso ao vivo de uma meta — funciona igual pra metas livres e vinculadas */
+function calcMetaProgresso(meta) {
+  let objetivo, atual, dividaNaoEncontrada = false;
+
+  if (meta.divida_id) {
+    const d = dividas.find(x => x.id === meta.divida_id);
+    if (d) {
+      const c = calcDivida(d);
+      objetivo = c.total;
+      atual = c.descontado;
+    } else {
+      objetivo = 0; atual = 0; dividaNaoEncontrada = true;
+    }
+  } else {
+    objetivo = meta.valor_objetivo || 0;
+    atual = meta.valor_atual || 0;
+  }
+
+  const restante = Math.max(0, objetivo - atual);
+  const pct = objetivo > 0 ? Math.min(100, Math.round((atual / objetivo) * 100)) : (atual > 0 ? 100 : 0);
+  return { objetivo, atual, restante, pct, dividaNaoEncontrada };
+}
+
+/* status textual — segue a prioridade: concluída > prazo vencido > prazo próximo > perto de concluir > em andamento */
+function calcMetaStatus(meta, progresso) {
+  if (progresso.pct >= 100) return { id: 'concluida', label: 'Concluída', cor: 'green', icone: '✅' };
+
+  if (meta.prazo) {
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const prazoDate = new Date(meta.prazo + 'T00:00:00');
+    const dias = Math.round((prazoDate - hoje) / 86400000);
+    if (dias < 0) return { id: 'vencida', label: 'Prazo vencido', cor: 'pink', icone: '⏰' };
+    if (dias <= 7) return { id: 'prazo_proximo', label: 'Prazo próximo', cor: 'gold', icone: '⚠️' };
+  }
+
+  if (progresso.pct >= 80) return { id: 'proxima', label: 'Próxima de concluir', cor: 'blue', icone: '🔥' };
+  return { id: 'andamento', label: 'Em andamento', cor: 'blue', icone: '🚀' };
+}
+
+function calcResumoMetas() {
+  const linhas = metas.map(m => ({ meta: m, progresso: calcMetaProgresso(m) }));
+  const concluidas = linhas.filter(x => x.progresso.pct >= 100);
+  const ativas = linhas.filter(x => x.progresso.pct < 100);
+  const acumulado = linhas.reduce((s, x) => s + x.progresso.atual, 0);
+  const restante = linhas.reduce((s, x) => s + x.progresso.restante, 0);
+  return { qtdAtivas: ativas.length, qtdConcluidas: concluidas.length, acumulado, restante };
+}
+
+function renderMetas() {
+  const container = document.getElementById('metas-content');
+
+  if (!metas.length) {
+    container.innerHTML = emptyStateHtml({
+      icon: '🎯',
+      title: 'Nenhuma meta cadastrada ainda',
+      subtitle: 'Crie objetivos como "Reserva de emergência" ou vincule uma meta direto a uma dívida pra acompanhar o progresso automaticamente.',
+      ctaLabel: '+ Nova Meta',
+      ctaId: 'btn-empty-nova-meta',
+    });
+    const ctaBtn = document.getElementById('btn-empty-nova-meta');
+    if (ctaBtn) ctaBtn.addEventListener('click', () => openMetaModal());
+    return;
+  }
+
+  const resumo = calcResumoMetas();
+
+  const resumoHtml = `
+    <div class="stats-grid" style="margin-bottom:32px;">
+      <div class="stat-card blue">
+        <div class="stat-label">Metas Ativas</div>
+        <div class="stat-value">${resumo.qtdAtivas}</div>
+        <div class="stat-sub">ainda em andamento</div>
+      </div>
+      <div class="stat-card green">
+        <div class="stat-label">Metas Concluídas</div>
+        <div class="stat-value">${resumo.qtdConcluidas}</div>
+        <div class="stat-sub">objetivo alcançado</div>
+      </div>
+      <div class="stat-card green">
+        <div class="stat-label">Total Acumulado</div>
+        <div class="stat-value">R$ ${resumo.acumulado.toLocaleString('pt-BR')}</div>
+        <div class="stat-sub">somando todas as metas</div>
+      </div>
+      <div class="stat-card blue">
+        <div class="stat-label">Total Restante</div>
+        <div class="stat-value">R$ ${resumo.restante.toLocaleString('pt-BR')}</div>
+        <div class="stat-sub">pra bater todos os objetivos</div>
+      </div>
+    </div>
+  `;
+
+  const cardsHtml = `
+    <div class="metas-grid">
+      ${metas.map(m => {
+        const progresso = calcMetaProgresso(m);
+        const status = calcMetaStatus(m, progresso);
+        const prazoLabel = m.prazo ? new Date(m.prazo + 'T00:00:00').toLocaleDateString('pt-BR') : null;
+
+        return `
+        <div class="meta-card" data-id="${m.id}">
+          <div class="meta-card-top">
+            <div class="meta-card-titulo">🎯 ${m.nome}</div>
+            <div class="meta-status ${status.cor}">${status.icone} ${status.label}</div>
+          </div>
+          ${m.descricao ? `<div class="meta-card-desc">${m.descricao}</div>` : ''}
+          ${progresso.dividaNaoEncontrada ? `<div class="meta-card-aviso">⚠️ A dívida vinculada a essa meta não existe mais. Edite pra desvincular ou ajustar.</div>` : ''}
+
+          <div class="progress-header" style="margin-top:14px;">
+            <span class="progress-label">R$ ${progresso.atual.toLocaleString('pt-BR')} de R$ ${progresso.objetivo.toLocaleString('pt-BR')}</span>
+            <span class="progress-pct">${progresso.pct}%</span>
+          </div>
+          <div class="progress-bar-wrap">
+            <div class="progress-bar-fill" style="width:${progresso.pct}%"></div>
+          </div>
+
+          <div class="meta-card-meta-info">
+            <span>Restante: <b>R$ ${progresso.restante.toLocaleString('pt-BR')}</b></span>
+            ${m.categoria ? `<span>${m.categoria}</span>` : ''}
+            ${prazoLabel ? `<span>Prazo: ${prazoLabel}</span>` : ''}
+            ${m.divida_id ? `<span>🔗 vinculada a uma dívida</span>` : ''}
+          </div>
+
+          <div class="meta-card-actions">
+            <button class="meta-btn-editar" data-id="${m.id}">✏️ Editar</button>
+            <button class="meta-btn-excluir" data-id="${m.id}">🗑️ Excluir</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+
+  container.innerHTML = resumoHtml + cardsHtml;
+
+  container.querySelectorAll('.meta-btn-editar').forEach(btn => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); openMetaModal(btn.dataset.id); });
+  });
+  container.querySelectorAll('.meta-btn-excluir').forEach(btn => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); excluirMeta(btn.dataset.id); });
+  });
+  container.querySelectorAll('.meta-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const m = metas.find(x => x.id === card.dataset.id);
+      if (m && m.divida_id) irParaDivida(m.divida_id);
+    });
+  });
+}
+
+/* ── Modal: criar/editar meta ── */
+function preencherSelectCategoriaMeta(valorAtual) {
+  const select = document.getElementById('select-meta-categoria');
+  const isOutra = valorAtual && !CATEGORIAS_META.includes(valorAtual);
+  select.innerHTML = `
+    <option value="">Sem categoria</option>
+    ${CATEGORIAS_META.map(c => `<option value="${c}" ${c === valorAtual ? 'selected' : ''}>${c}</option>`).join('')}
+    <option value="outra" ${isOutra ? 'selected' : ''}>Outra</option>
+  `;
+  const inputOutra = document.getElementById('input-meta-categoria-outra');
+  if (isOutra) {
+    inputOutra.style.display = 'block';
+    inputOutra.value = valorAtual;
+  } else {
+    inputOutra.style.display = 'none';
+    inputOutra.value = '';
+  }
+}
+
+function preencherSelectDividaMeta(dividaIdAtual) {
+  const select = document.getElementById('select-meta-divida');
+  if (!dividas.length) {
+    select.innerHTML = `<option value="">Nenhuma dívida cadastrada</option>`;
+    return;
+  }
+  select.innerHTML = dividas.map(d => `<option value="${d.id}" ${d.id === dividaIdAtual ? 'selected' : ''}>${d.titulo}</option>`).join('');
+  atualizarPreviewMetaDivida();
+}
+
+function atualizarPreviewMetaDivida() {
+  const select = document.getElementById('select-meta-divida');
+  const preview = document.getElementById('meta-divida-preview');
+  const d = dividas.find(x => x.id === select.value);
+  if (!d) { preview.textContent = ''; return; }
+  const c = calcDivida(d);
+  preview.textContent = `Objetivo e valor atual serão calculados automaticamente: R$ ${c.descontado.toLocaleString('pt-BR')} pagos de R$ ${c.total.toLocaleString('pt-BR')} (${c.pct}%).`;
+}
+
+function setTipoMetaModal(tipo) {
+  tipoMetaModal = tipo;
+  document.getElementById('btn-meta-tipo-livre').classList.toggle('active', tipo === 'livre');
+  document.getElementById('btn-meta-tipo-divida').classList.toggle('active', tipo === 'divida');
+  document.getElementById('bloco-meta-livre').style.display = tipo === 'livre' ? 'block' : 'none';
+  document.getElementById('bloco-meta-divida').style.display = tipo === 'divida' ? 'block' : 'none';
+}
+
+function openMetaModal(id = null) {
+  metaEmEdicao = id;
+  const meta = id ? metas.find(x => x.id === id) : null;
+
+  document.getElementById('meta-modal-title').textContent = meta ? 'Editar Meta' : 'Nova Meta';
+  document.getElementById('input-meta-nome').value = meta?.nome || '';
+  document.getElementById('input-meta-descricao').value = meta?.descricao || '';
+  document.getElementById('input-meta-objetivo').value = meta?.valor_objetivo ?? '';
+  document.getElementById('input-meta-atual').value = meta?.valor_atual ?? '';
+  document.getElementById('input-meta-prazo').value = meta?.prazo || '';
+
+  preencherSelectCategoriaMeta(meta?.categoria || '');
+  preencherSelectDividaMeta(meta?.divida_id || (dividas[0]?.id ?? ''));
+  setTipoMetaModal(meta?.divida_id ? 'divida' : 'livre');
+
+  document.getElementById('meta-overlay').classList.add('show');
+}
+
+function closeMetaModal() {
+  document.getElementById('meta-overlay').classList.remove('show');
+  metaEmEdicao = null;
+}
+
+async function salvarMeta() {
+  const nome = document.getElementById('input-meta-nome').value.trim();
+  if (!nome) { showToast('Digite um nome para a meta'); return; }
+
+  const descricao = document.getElementById('input-meta-descricao').value.trim() || null;
+  const prazo = document.getElementById('input-meta-prazo').value || null;
+
+  const selectCategoria = document.getElementById('select-meta-categoria').value;
+  const categoria = selectCategoria === 'outra'
+    ? (document.getElementById('input-meta-categoria-outra').value.trim() || null)
+    : (selectCategoria || null);
+
+  let payload = { nome, descricao, categoria, prazo, user_id: currentUser.id };
+
+  if (tipoMetaModal === 'divida') {
+    const dividaId = document.getElementById('select-meta-divida').value;
+    if (!dividaId) { showToast('Selecione uma dívida para vincular'); return; }
+    payload.divida_id = dividaId;
+    payload.valor_objetivo = null;
+    payload.valor_atual = null;
+  } else {
+    const objetivo = parseFloat(document.getElementById('input-meta-objetivo').value);
+    const atual = parseFloat(document.getElementById('input-meta-atual').value) || 0;
+    if (isNaN(objetivo) || objetivo <= 0) { showToast('Digite um valor objetivo válido'); return; }
+    payload.divida_id = null;
+    payload.valor_objetivo = objetivo;
+    payload.valor_atual = atual;
+  }
+
+  if (metaEmEdicao) {
+    const { data, error } = await supabaseClient
+      .from('metas')
+      .update(payload)
+      .eq('id', metaEmEdicao)
+      .select()
+      .single();
+    if (error) { showToast('Erro ao salvar meta: ' + error.message); return; }
+    const idx = metas.findIndex(x => x.id === metaEmEdicao);
+    if (idx !== -1) metas[idx] = data;
+    showToast('Meta atualizada.');
+  } else {
+    const { data, error } = await supabaseClient
+      .from('metas')
+      .insert(payload)
+      .select()
+      .single();
+    if (error) { showToast('Erro ao criar meta: ' + error.message); return; }
+    metas.push(data);
+    showToast('Meta criada.');
+  }
+
+  closeMetaModal();
+  renderMetas();
+}
+
+async function excluirMeta(id) {
+  const m = metas.find(x => x.id === id);
+  if (!m) return;
+  const ok = confirm(`Excluir a meta "${m.nome}"? Essa ação não pode ser desfeita.`);
+  if (!ok) return;
+
+  const { error } = await supabaseClient.from('metas').delete().eq('id', id);
+  if (error) { showToast('Erro ao excluir meta: ' + error.message); return; }
+
+  metas = metas.filter(x => x.id !== id);
+  renderMetas();
+  showToast(`Meta "${m.nome}" excluída`);
 }
 
 /* ============================================================
@@ -2113,6 +2446,7 @@ function closeEditParcelaModal() {
 function refreshViewAtual() {
   if (document.getElementById('view-historico').style.display === 'block') renderHistorico();
   else if (document.getElementById('view-geral').style.display === 'block') renderVisaoGeral();
+  else if (document.getElementById('view-metas').style.display === 'block') renderMetas();
 }
 
 async function salvarEdicaoParcela() {
@@ -2538,6 +2872,24 @@ document.getElementById('btn-editar-parcela-historico').addEventListener('click'
   const { dividaId, idx } = detalheHistoricoAtual;
   fecharDetalhePagamento();
   openEditParcelaModal(dividaId, idx);
+});
+
+/* ── Metas Financeiras ── */
+document.getElementById('btn-metas').addEventListener('click', showMetasView);
+document.getElementById('btn-voltar-dividas-metas').addEventListener('click', showDividasView);
+document.getElementById('btn-nova-meta').addEventListener('click', () => openMetaModal());
+document.getElementById('btn-cancelar-meta').addEventListener('click', closeMetaModal);
+document.getElementById('btn-salvar-meta').addEventListener('click', salvarMeta);
+document.getElementById('meta-overlay').addEventListener('click', (e) => {
+  if (e.target.id === 'meta-overlay') closeMetaModal();
+});
+document.getElementById('btn-meta-tipo-livre').addEventListener('click', () => setTipoMetaModal('livre'));
+document.getElementById('btn-meta-tipo-divida').addEventListener('click', () => setTipoMetaModal('divida'));
+document.getElementById('select-meta-divida').addEventListener('change', atualizarPreviewMetaDivida);
+document.getElementById('select-meta-categoria').addEventListener('change', (e) => {
+  const inputOutra = document.getElementById('input-meta-categoria-outra');
+  inputOutra.style.display = e.target.value === 'outra' ? 'block' : 'none';
+  if (e.target.value === 'outra') inputOutra.focus();
 });
 
 document.getElementById('select-perfil-profissao').addEventListener('change', (e) => {

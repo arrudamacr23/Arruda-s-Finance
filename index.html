@@ -58,6 +58,7 @@
       </div>
       <button class="btn-back" id="btn-geral">📊 Geral</button>
       <button class="btn-back" id="btn-historico">🕓 Histórico</button>
+      <button class="btn-back" id="btn-metas">🎯 Metas</button>
       <button class="btn-back" id="btn-perfil">👤 Perfil</button>
       <button class="btn-back" id="btn-logout">Sair</button>
     </div>
@@ -95,6 +96,21 @@
       </div>
     </div>
     <div id="historico-content"></div>
+  </div>
+
+  <!-- View: Metas Financeiras -->
+  <div id="view-metas" style="display:none;">
+    <div class="dashboard-header">
+      <div>
+        <h2 class="dashboard-title">Metas Financeiras</h2>
+        <div class="dashboard-badge">Seus objetivos e o progresso até eles</div>
+      </div>
+      <div class="dashboard-actions">
+        <button class="btn-primary" id="btn-nova-meta">+ Nova Meta</button>
+        <button class="btn-back" id="btn-voltar-dividas-metas">← Voltar para Dívidas</button>
+      </div>
+    </div>
+    <div id="metas-content"></div>
   </div>
 
   <!-- View: Perfil -->
@@ -303,6 +319,57 @@
     <div class="modal-actions">
       <button class="btn-secondary" id="btn-fechar-detalhe-historico">Fechar</button>
       <button class="btn-primary" id="btn-editar-parcela-historico">✏️ Editar Parcela</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: criar/editar meta financeira -->
+<div class="modal-overlay" id="meta-overlay">
+  <div class="modal">
+    <div class="modal-title" id="meta-modal-title">Nova Meta</div>
+
+    <label class="modal-label">Nome da meta</label>
+    <input type="text" id="input-meta-nome" class="modal-input" placeholder="Ex: Reserva de emergência" />
+
+    <label class="modal-label">Descrição (opcional)</label>
+    <textarea id="input-meta-descricao" class="modal-input" rows="2" placeholder="Detalhes sobre essa meta"></textarea>
+
+    <div class="modo-divida-toggle">
+      <button type="button" class="modo-divida-btn active" id="btn-meta-tipo-livre" data-tipo="livre">Meta livre</button>
+      <button type="button" class="modo-divida-btn" id="btn-meta-tipo-divida" data-tipo="divida">Vinculada a uma dívida</button>
+    </div>
+
+    <!-- Modo: meta livre -->
+    <div id="bloco-meta-livre">
+      <div class="modal-row">
+        <div class="modal-col">
+          <label class="modal-label">Valor objetivo (R$)</label>
+          <input type="number" id="input-meta-objetivo" class="modal-input" placeholder="Ex: 10000" min="0" step="0.01" />
+        </div>
+        <div class="modal-col">
+          <label class="modal-label">Valor atual (R$)</label>
+          <input type="number" id="input-meta-atual" class="modal-input" placeholder="Ex: 0" min="0" step="0.01" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Modo: vinculada a dívida -->
+    <div id="bloco-meta-divida" style="display:none;">
+      <label class="modal-label">Dívida</label>
+      <select id="select-meta-divida" class="modal-input"></select>
+      <p class="modal-hint" id="meta-divida-preview"></p>
+    </div>
+
+    <label class="modal-label">Categoria (opcional)</label>
+    <select id="select-meta-categoria" class="modal-input"></select>
+    <input type="text" id="input-meta-categoria-outra" class="modal-input" placeholder="Digite a categoria" style="display:none; margin-top:10px;" />
+
+    <label class="modal-label">Prazo (opcional)</label>
+    <input type="date" id="input-meta-prazo" class="modal-input" />
+
+    <div class="modal-actions">
+      <button class="btn-secondary" id="btn-cancelar-meta">Cancelar</button>
+      <button class="btn-primary" id="btn-salvar-meta">Salvar Meta</button>
     </div>
   </div>
 </div>
