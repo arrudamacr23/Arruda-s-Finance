@@ -482,6 +482,7 @@ function showDividasView() {
   document.getElementById('view-dividas').style.display = 'block';
   document.getElementById('view-perfil').style.display = 'none';
   document.getElementById('view-geral').style.display = 'none';
+  document.getElementById('view-historico').style.display = 'none';
   fadeInView(document.getElementById('view-dividas'));
 }
 
@@ -489,6 +490,7 @@ function showPerfilView() {
   document.getElementById('view-dividas').style.display = 'none';
   document.getElementById('view-perfil').style.display = 'block';
   document.getElementById('view-geral').style.display = 'none';
+  document.getElementById('view-historico').style.display = 'none';
   renderPerfilForm();
   renderResumoFinanceiro();
   fadeInView(document.getElementById('view-perfil'));
@@ -498,8 +500,18 @@ function showGeralView() {
   document.getElementById('view-dividas').style.display = 'none';
   document.getElementById('view-perfil').style.display = 'none';
   document.getElementById('view-geral').style.display = 'block';
+  document.getElementById('view-historico').style.display = 'none';
   renderVisaoGeral();
   fadeInView(document.getElementById('view-geral'));
+}
+
+function showHistoricoView() {
+  document.getElementById('view-dividas').style.display = 'none';
+  document.getElementById('view-perfil').style.display = 'none';
+  document.getElementById('view-geral').style.display = 'none';
+  document.getElementById('view-historico').style.display = 'block';
+  renderHistorico();
+  fadeInView(document.getElementById('view-historico'));
 }
 
 /* soma, para cada uma das próximas `qtdMeses` (a partir do mês atual),
@@ -982,6 +994,330 @@ function renderVisaoGeral() {
   });
   const quitadasCard = document.getElementById('quitadas-resumo-card');
   if (quitadasCard) quitadasCard.addEventListener('click', () => irParaDivida('__quitadas__'));
+}
+
+/* ============================================================
+   HISTÓRICO FINANCEIRO
+   ============================================================
+   Toda a base de dados já vem carregada em `dividas` (parcelas
+   com `paga` e `pago_em`, buscadas em loadDividas). Não é preciso
+   nenhuma consulta nova ao Supabase — só reorganizar o que já
+   existe em memória.
+   ============================================================ */
+
+let filtroHistDivida  = 'todas';
+let filtroHistMes     = 'todos';
+let filtroHistAno     = 'todos';
+let filtroHistPeriodo = 'tudo';
+let qtdMesesGrafico    = 6;
+
+/* achata todas as parcelas PAGAS de todas as dívidas, anexando a dívida-mãe
+   e a data real do pagamento (quando `pago_em` existe) */
+function listarPagamentos() {
+  const lista = [];
+  dividas.forEach(d => {
+    d.parcelas.forEach(p => {
+      if (!p.paga) return;
+      lista.push({
+        divida: d,
+        parcela: p,
+        dataPagamento: p.pago_em ? new Date(p.pago_em) : null,
+      });
+    });
+  });
+  return lista;
+}
+
+/* anos que realmente têm pagamento com data registrada — usado só pra
+   popular o filtro de ano, sem inventar nenhum ano que não exista nos dados */
+function anosDisponiveisPagamentos(pagamentos) {
+  const anos = new Set(pagamentos.filter(x => x.dataPagamento).map(x => x.dataPagamento.getFullYear()));
+  return [...anos].sort((a, b) => b - a);
+}
+
+/* aplica os filtros de dívida / mês / ano / período sobre a lista de pagamentos.
+   Pagamentos sem `pago_em` registrado só aparecem quando nenhum filtro baseado
+   em data está ativo (não dá pra saber se eles "batem" com um mês/ano/período). */
+function aplicarFiltrosHistorico(pagamentos) {
+  const { mesIdx, ano } = hojeInfo();
+  const chaveAtual = ano * 12 + mesIdx;
+  const janelaPeriodo = {
+    ultimos_3: chaveAtual - 2,
+    ultimos_6: chaveAtual - 5,
+    este_ano:  ano * 12,
+  };
+
+  const temFiltroData = filtroHistMes !== 'todos' || filtroHistAno !== 'todos' || filtroHistPeriodo !== 'tudo';
+
+  return pagamentos.filter(item => {
+    if (filtroHistDivida !== 'todas' && item.divida.id !== filtroHistDivida) return false;
+
+    if (!temFiltroData) return true;
+    if (!item.dataPagamento) return false; // sem data + filtro de data ativo → não dá pra confirmar
+
+    const dp = item.dataPagamento;
+    if (filtroHistMes !== 'todos' && dp.getMonth() !== parseInt(filtroHistMes, 10)) return false;
+    if (filtroHistAno !== 'todos' && dp.getFullYear() !== parseInt(filtroHistAno, 10)) return false;
+
+    if (filtroHistPeriodo !== 'tudo') {
+      const chave = dp.getFullYear() * 12 + dp.getMonth();
+      const min = filtroHistPeriodo === 'este_ano' ? janelaPeriodo.este_ano : janelaPeriodo[filtroHistPeriodo];
+      const max = filtroHistPeriodo === 'este_ano' ? ano * 12 + 11 : chaveAtual;
+      if (chave < min || chave > max) return false;
+    }
+    return true;
+  });
+}
+
+/* ordena do pagamento mais recente pro mais antigo; sem data registrada vai pro fim,
+   ordenado pelo mês/ano da própria parcela como critério de desempate honesto */
+function ordenarHistorico(pagamentos) {
+  return pagamentos.slice().sort((a, b) => {
+    if (a.dataPagamento && b.dataPagamento) return b.dataPagamento - a.dataPagamento;
+    if (a.dataPagamento && !b.dataPagamento) return -1;
+    if (!a.dataPagamento && b.dataPagamento) return 1;
+    return chaveData(b.parcela) - chaveData(a.parcela);
+  });
+}
+
+/* agrupa pagamentos (com data) por mês calendário real do pagamento */
+function calcResumoPorMes(pagamentos) {
+  const comData = pagamentos.filter(x => x.dataPagamento);
+  const mapa = new Map();
+
+  comData.forEach(({ dataPagamento, parcela }) => {
+    const chave = dataPagamento.getFullYear() * 12 + dataPagamento.getMonth();
+    if (!mapa.has(chave)) {
+      mapa.set(chave, { chave, ano: dataPagamento.getFullYear(), mesIdx: dataPagamento.getMonth(), qtd: 0, total: 0 });
+    }
+    const bucket = mapa.get(chave);
+    bucket.qtd += 1;
+    bucket.total += parcela.valor;
+  });
+
+  return [...mapa.values()].sort((a, b) => b.chave - a.chave);
+}
+
+/* totais do período filtrado — inclui pagamentos sem data no valor/quantidade,
+   mas média mensal e "maior mês" só fazem sentido com base nos meses reais */
+function calcTotaisHistorico(pagamentosFiltrados, resumoPorMes) {
+  const totalPago = pagamentosFiltrados.reduce((s, x) => s + x.parcela.valor, 0);
+  const qtdParcelasPagas = pagamentosFiltrados.length;
+  const qtdSemData = pagamentosFiltrados.filter(x => !x.dataPagamento).length;
+
+  const qtdMesesComDado = resumoPorMes.length;
+  const totalComData = resumoPorMes.reduce((s, m) => s + m.total, 0);
+  const mediaMensal = qtdMesesComDado ? totalComData / qtdMesesComDado : 0;
+
+  let maiorMes = null;
+  resumoPorMes.forEach(m => { if (!maiorMes || m.total > maiorMes.total) maiorMes = m; });
+
+  return { totalPago, qtdParcelasPagas, qtdSemData, mediaMensal, maiorMes };
+}
+
+function labelMes(mesIdx, ano) { return `${MESES[mesIdx]}/${ano}`; }
+
+function renderHistorico() {
+  const container = document.getElementById('historico-content');
+  const todosPagamentos = listarPagamentos();
+
+  if (!todosPagamentos.length) {
+    container.innerHTML = emptyStateHtml({
+      icon: '🕓',
+      title: 'Nenhum pagamento registrado ainda',
+      subtitle: 'Assim que você marcar parcelas como pagas na aba "Dívidas", elas vão aparecer aqui com sua evolução ao longo do tempo.',
+    });
+    return;
+  }
+
+  const anosDisponiveis = anosDisponiveisPagamentos(todosPagamentos);
+  const filtrados = ordenarHistorico(aplicarFiltrosHistorico(todosPagamentos));
+  const resumoPorMes = calcResumoPorMes(filtrados);
+  const totais = calcTotaisHistorico(filtrados, resumoPorMes);
+
+  /* gráfico de evolução: respeita só o filtro de dívida (não mês/ano/período),
+     senão o próprio filtro esvaziaria o gráfico que ele deveria ilustrar */
+  const pagamentosParaGrafico = filtroHistDivida === 'todas'
+    ? todosPagamentos
+    : todosPagamentos.filter(x => x.divida.id === filtroHistDivida);
+  const resumoGrafico = calcResumoPorMes(pagamentosParaGrafico);
+  const janelaGrafico = qtdMesesGrafico === 'tudo' ? resumoGrafico : resumoGrafico.slice(0, qtdMesesGrafico);
+  const graficoAsc = janelaGrafico.slice().reverse();
+  const maiorValorGrafico = Math.max(1, ...graficoAsc.map(m => m.total));
+
+  /* ── filtros ── */
+  const filtrosHtml = `
+    <div class="historico-filtros">
+      <select class="filtro-select" id="hist-filtro-divida">
+        <option value="todas">Todas as dívidas</option>
+        ${dividas.map(d => `<option value="${d.id}" ${filtroHistDivida === d.id ? 'selected' : ''}>${d.titulo}</option>`).join('')}
+      </select>
+      <select class="filtro-select" id="hist-filtro-mes">
+        <option value="todos">Todos os meses</option>
+        ${MESES.map((m, i) => `<option value="${i}" ${filtroHistMes === String(i) ? 'selected' : ''}>${m}</option>`).join('')}
+      </select>
+      <select class="filtro-select" id="hist-filtro-ano">
+        <option value="todos">Todos os anos</option>
+        ${anosDisponiveis.map(a => `<option value="${a}" ${filtroHistAno === String(a) ? 'selected' : ''}>${a}</option>`).join('')}
+      </select>
+      <select class="filtro-select" id="hist-filtro-periodo">
+        <option value="tudo" ${filtroHistPeriodo === 'tudo' ? 'selected' : ''}>Todo o período</option>
+        <option value="ultimos_3" ${filtroHistPeriodo === 'ultimos_3' ? 'selected' : ''}>Últimos 3 meses</option>
+        <option value="ultimos_6" ${filtroHistPeriodo === 'ultimos_6' ? 'selected' : ''}>Últimos 6 meses</option>
+        <option value="este_ano" ${filtroHistPeriodo === 'este_ano' ? 'selected' : ''}>Este ano</option>
+      </select>
+    </div>
+  `;
+
+  /* ── total pago ── */
+  const totalPagoHtml = `
+    <div class="stats-grid">
+      <div class="stat-card green">
+        <div class="stat-label">Total Pago no Período</div>
+        <div class="stat-value">R$ ${totais.totalPago.toLocaleString('pt-BR')}</div>
+        <div class="stat-sub">${totais.qtdParcelasPagas} parcela${totais.qtdParcelasPagas !== 1 ? 's' : ''} paga${totais.qtdParcelasPagas !== 1 ? 's' : ''}</div>
+      </div>
+      <div class="stat-card blue">
+        <div class="stat-label">Média Mensal Paga</div>
+        <div class="stat-value">R$ ${totais.mediaMensal.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</div>
+        <div class="stat-sub">${resumoPorMes.length} mês${resumoPorMes.length !== 1 ? 'es' : ''} com pagamento registrado</div>
+      </div>
+      <div class="stat-card gold">
+        <div class="stat-label">Maior Valor Pago em um Mês</div>
+        <div class="stat-value">${totais.maiorMes ? `R$ ${totais.maiorMes.total.toLocaleString('pt-BR')}` : '—'}</div>
+        <div class="stat-sub">${totais.maiorMes ? labelMes(totais.maiorMes.mesIdx, totais.maiorMes.ano) : 'sem dados suficientes'}</div>
+      </div>
+      <div class="stat-card blue">
+        <div class="stat-label">Parcelas Pagas (total)</div>
+        <div class="stat-value">${totais.qtdParcelasPagas}</div>
+        <div class="stat-sub">${totais.qtdSemData > 0 ? `${totais.qtdSemData} sem data de pagamento registrada` : 'todas com data registrada'}</div>
+      </div>
+    </div>
+  `;
+
+  /* ── gráfico de evolução ── */
+  const graficoHtml = !graficoAsc.length
+    ? `<div class="geral-empty-mini">Ainda não há pagamentos com data registrada para montar o gráfico.</div>`
+    : `
+      <div class="mes-bar-list">
+        ${graficoAsc.map(m => `
+          <div class="mes-bar-row">
+            <div class="mes-bar-label">${MESES[m.mesIdx].slice(0, 3)}/${String(m.ano).slice(2)}</div>
+            <div class="mes-bar-track">
+              <div class="mes-bar-fill" style="width:${Math.max(4, (m.total / maiorValorGrafico) * 100)}%"></div>
+            </div>
+            <div class="mes-bar-valor">R$ ${m.total.toLocaleString('pt-BR')}</div>
+          </div>`).join('')}
+      </div>
+    `;
+
+  /* ── resumo por mês ── */
+  const resumoMesHtml = !resumoPorMes.length
+    ? `<div class="geral-empty-mini">Nenhum pagamento com data registrada no filtro atual.</div>`
+    : `
+      <div class="resumo-mes-grid">
+        ${resumoPorMes.map(m => `
+          <div class="resumo-mes-card">
+            <div class="resumo-mes-titulo">${labelMes(m.mesIdx, m.ano)}</div>
+            <div class="resumo-mes-qtd">${m.qtd} parcela${m.qtd !== 1 ? 's' : ''} paga${m.qtd !== 1 ? 's' : ''}</div>
+            <div class="resumo-mes-valor">R$ ${m.total.toLocaleString('pt-BR')} pagos</div>
+          </div>`).join('')}
+      </div>
+    `;
+
+  /* ── lista de pagamentos ── */
+  const listaHtml = !filtrados.length
+    ? `<div class="geral-empty-mini">Nenhum pagamento encontrado com os filtros selecionados.</div>`
+    : `
+      <div class="historico-list">
+        ${filtrados.map(({ divida, parcela, dataPagamento }) => `
+          <div class="historico-item" data-divida-id="${divida.id}" data-parcela-id="${parcela.id}">
+            <div class="historico-data">${dataPagamento ? dataPagamento.toLocaleDateString('pt-BR') : 'Sem data'}</div>
+            <div class="historico-info">
+              <div class="historico-titulo">${divida.titulo}</div>
+              <div class="historico-sub">Parcela de ${parcela.mes}/${parcela.ano}</div>
+            </div>
+            <div class="historico-valor">R$ ${parcela.valor.toLocaleString('pt-BR')}</div>
+          </div>`).join('')}
+      </div>
+    `;
+
+  container.innerHTML = `
+    ${filtrosHtml}
+    ${totalPagoHtml}
+
+    <div class="progress-section">
+      <div class="geral-section-header">
+        <div class="section-title" style="margin-bottom:0;">Evolução dos Pagamentos</div>
+        <select class="filtro-select" id="hist-filtro-grafico">
+          <option value="6" ${qtdMesesGrafico === 6 ? 'selected' : ''}>Últimos 6 meses</option>
+          <option value="12" ${qtdMesesGrafico === 12 ? 'selected' : ''}>Últimos 12 meses</option>
+          <option value="tudo" ${qtdMesesGrafico === 'tudo' ? 'selected' : ''}>Tudo</option>
+        </select>
+      </div>
+      <div class="timeline-hint">Soma dos pagamentos com data registrada, por mês${filtroHistDivida !== 'todas' ? ' · filtrado pela dívida selecionada acima' : ''} — não é afetado pelos filtros de mês/ano/período</div>
+      ${graficoHtml}
+    </div>
+
+    <div class="progress-section">
+      <div class="section-title">Resumo por Mês</div>
+      ${resumoMesHtml}
+    </div>
+
+    <div class="progress-section">
+      <div class="section-title">Histórico de Pagamentos</div>
+      <div class="timeline-hint">Do mais recente para o mais antigo · clique num pagamento para ver os detalhes da parcela</div>
+      ${listaHtml}
+    </div>
+  `;
+
+  /* ── listeners dos filtros ── */
+  document.getElementById('hist-filtro-divida').addEventListener('change', (e) => { filtroHistDivida = e.target.value; renderHistorico(); });
+  document.getElementById('hist-filtro-mes').addEventListener('change', (e) => { filtroHistMes = e.target.value; renderHistorico(); });
+  document.getElementById('hist-filtro-ano').addEventListener('change', (e) => { filtroHistAno = e.target.value; renderHistorico(); });
+  document.getElementById('hist-filtro-periodo').addEventListener('change', (e) => { filtroHistPeriodo = e.target.value; renderHistorico(); });
+  document.getElementById('hist-filtro-grafico').addEventListener('change', (e) => {
+    qtdMesesGrafico = e.target.value === 'tudo' ? 'tudo' : parseInt(e.target.value, 10);
+    renderHistorico();
+  });
+
+  container.querySelectorAll('.historico-item').forEach(el => {
+    el.addEventListener('click', () => abrirDetalhePagamento(el.dataset.dividaId, el.dataset.parcelaId));
+  });
+}
+
+/* ── modal de detalhes do pagamento (somente leitura, com atalho pra editar) ── */
+let detalheHistoricoAtual = null;
+
+function abrirDetalhePagamento(dividaId, parcelaId) {
+  const d = dividas.find(x => x.id === dividaId);
+  if (!d) return;
+  const idx = d.parcelas.findIndex(p => p.id === parcelaId);
+  if (idx === -1) return;
+  const p = d.parcelas[idx];
+
+  detalheHistoricoAtual = { dividaId, idx };
+
+  const linhas = [
+    ['Dívida', d.titulo],
+    ['Parcela', `${p.mes}/${p.ano}`],
+    ['Valor', `R$ ${p.valor.toLocaleString('pt-BR')}`],
+    ['Status', p.paga ? '✓ Paga' : '○ Pendente'],
+    ['Data do Pagamento', p.pago_em ? new Date(p.pago_em).toLocaleString('pt-BR') : 'Não registrada'],
+  ];
+
+  document.getElementById('historico-detalhe-lista').innerHTML = linhas.map(([label, valor]) => `
+    <div class="detalhe-row">
+      <div class="detalhe-label">${label}</div>
+      <div class="detalhe-value">${valor}</div>
+    </div>`).join('');
+
+  document.getElementById('historico-detalhe-overlay').classList.add('show');
+}
+
+function fecharDetalhePagamento() {
+  document.getElementById('historico-detalhe-overlay').classList.remove('show');
+  detalheHistoricoAtual = null;
 }
 
 /* ── Tabs ── */
@@ -1530,6 +1866,14 @@ function closeEditParcelaModal() {
   parcelaEmEdicao = null;
 }
 
+/* atualiza a view que estiver visível no momento — necessário porque a edição/exclusão
+   de uma parcela pode ser aberta a partir do Histórico ou da Visão Geral, não só da
+   aba "Dívidas", e cada uma dessas telas tem seu próprio conteúdo pra recalcular */
+function refreshViewAtual() {
+  if (document.getElementById('view-historico').style.display === 'block') renderHistorico();
+  else if (document.getElementById('view-geral').style.display === 'block') renderVisaoGeral();
+}
+
 async function salvarEdicaoParcela() {
   if (!parcelaEmEdicao) return;
   const { dividaId, idx } = parcelaEmEdicao;
@@ -1561,6 +1905,7 @@ async function salvarEdicaoParcela() {
   closeEditParcelaModal();
   renderTabs();
   renderContent();
+  refreshViewAtual();
   showToast(`Parcela atualizada: ${novoMes}/${novoAno} — R$ ${novoValor.toLocaleString('pt-BR')}`);
 }
 
@@ -1581,6 +1926,7 @@ async function excluirParcela() {
   closeEditParcelaModal();
   renderTabs();
   renderContent();
+  refreshViewAtual();
   showToast(`Parcela de ${p.mes}/${p.ano} excluída`);
 }
 
@@ -1647,6 +1993,7 @@ async function salvarNovaParcela() {
       ano,
       valor,
       paga,
+      pago_em: paga ? new Date().toISOString() : null,
       ordem: maiorOrdem + 1,
     })
     .select()
@@ -1919,6 +2266,20 @@ document.getElementById('btn-salvar-perfil').addEventListener('click', salvarPer
 /* ── Visão Geral ── */
 document.getElementById('btn-geral').addEventListener('click', showGeralView);
 document.getElementById('btn-voltar-dividas-geral').addEventListener('click', showDividasView);
+
+/* ── Histórico Financeiro ── */
+document.getElementById('btn-historico').addEventListener('click', showHistoricoView);
+document.getElementById('btn-voltar-dividas-historico').addEventListener('click', showDividasView);
+document.getElementById('btn-fechar-detalhe-historico').addEventListener('click', fecharDetalhePagamento);
+document.getElementById('historico-detalhe-overlay').addEventListener('click', (e) => {
+  if (e.target.id === 'historico-detalhe-overlay') fecharDetalhePagamento();
+});
+document.getElementById('btn-editar-parcela-historico').addEventListener('click', () => {
+  if (!detalheHistoricoAtual) return;
+  const { dividaId, idx } = detalheHistoricoAtual;
+  fecharDetalhePagamento();
+  openEditParcelaModal(dividaId, idx);
+});
 
 document.getElementById('select-perfil-profissao').addEventListener('change', (e) => {
   const inputOutra = document.getElementById('input-perfil-profissao-outra');

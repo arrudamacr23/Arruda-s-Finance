@@ -45,6 +45,7 @@
     <div class="header-right">
       <span class="header-user-email" id="header-user-email"></span>
       <button class="btn-back" id="btn-geral">📊 Geral</button>
+      <button class="btn-back" id="btn-historico">🕓 Histórico</button>
       <button class="btn-back" id="btn-perfil">👤 Perfil</button>
       <button class="btn-back" id="btn-logout">Sair</button>
     </div>
@@ -68,6 +69,20 @@
       </div>
     </div>
     <div id="geral-content"></div>
+  </div>
+
+  <!-- View: Histórico Financeiro -->
+  <div id="view-historico" style="display:none;">
+    <div class="dashboard-header">
+      <div>
+        <h2 class="dashboard-title">Histórico Financeiro</h2>
+        <div class="dashboard-badge">Sua evolução de pagamentos ao longo do tempo</div>
+      </div>
+      <div class="dashboard-actions">
+        <button class="btn-back" id="btn-voltar-dividas-historico">← Voltar para Dívidas</button>
+      </div>
+    </div>
+    <div id="historico-content"></div>
   </div>
 
   <!-- View: Perfil -->
@@ -262,6 +277,20 @@
     <div class="modal-actions">
       <button class="btn-secondary" id="btn-cancelar-edit-divida">Fechar</button>
       <button class="btn-primary" id="btn-salvar-edit-divida">Salvar Alterações</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: detalhes de um pagamento (Histórico) -->
+<div class="modal-overlay" id="historico-detalhe-overlay">
+  <div class="modal">
+    <div class="modal-title">Detalhes do Pagamento</div>
+
+    <div class="detalhe-list" id="historico-detalhe-lista"></div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" id="btn-fechar-detalhe-historico">Fechar</button>
+      <button class="btn-primary" id="btn-editar-parcela-historico">✏️ Editar Parcela</button>
     </div>
   </div>
 </div>

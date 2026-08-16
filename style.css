@@ -1632,3 +1632,97 @@ header {
   .pagamento-dias, .pagamento-valor { grid-column: 2; justify-self: start; }
   .pagamento-titulo { white-space: normal; }
 }
+
+/* ============================================================
+   HISTÓRICO FINANCEIRO
+   ============================================================ */
+
+.historico-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+
+.historico-filtros .filtro-select { flex: 1 1 180px; min-width: 150px; }
+
+/* ── Resumo por mês ── */
+.resumo-mes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px;
+}
+
+.resumo-mes-card {
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 20px;
+}
+
+.resumo-mes-titulo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 0.95rem; margin-bottom: 8px; }
+.resumo-mes-qtd { font-size: 0.72rem; color: #888899; margin-bottom: 4px; }
+.resumo-mes-valor { font-family: 'Syne', sans-serif; font-weight: 700; color: var(--accent); font-size: 0.98rem; }
+
+/* ── Lista de histórico de pagamentos ── */
+.historico-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.historico-item {
+  display: grid;
+  grid-template-columns: 110px 1fr auto;
+  align-items: center;
+  gap: 16px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 13px 18px;
+  cursor: pointer;
+  transition: all .2s;
+}
+
+.historico-item:hover { border-color: var(--accent); transform: translateX(2px); }
+
+.historico-data { font-family: 'DM Mono', monospace; font-size: 0.72rem; color: #888899; }
+.historico-info { min-width: 0; }
+.historico-titulo { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 0.86rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.historico-sub { font-size: 0.68rem; color: #888899; margin-top: 3px; }
+.historico-valor { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 0.92rem; color: var(--accent); white-space: nowrap; }
+
+/* ── Modal de detalhes do pagamento ── */
+.detalhe-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.detalhe-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.detalhe-row:last-child { border-bottom: none; }
+.detalhe-label { font-size: 0.72rem; color: #888899; text-transform: uppercase; letter-spacing: .5px; }
+.detalhe-value { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 0.88rem; text-align: right; }
+
+/* ── Responsividade ── */
+@media (max-width: 768px) {
+  .historico-filtros .filtro-select { flex: 1 1 100%; }
+  .resumo-mes-grid { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 480px) {
+  .historico-item { grid-template-columns: 1fr auto; row-gap: 4px; }
+  .historico-data { grid-column: 1 / -1; order: -1; }
+  .resumo-mes-grid { grid-template-columns: 1fr; }
+  .detalhe-row { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .detalhe-value { text-align: left; }
+}
