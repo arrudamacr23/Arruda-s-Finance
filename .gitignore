@@ -11,3 +11,6 @@
 #Arquivos do sistema
 .DS_Store
 Thumbs.db
+
+#Credenciais do Supabase (use config.example.js como modelo)
+config.js

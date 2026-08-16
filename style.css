@@ -1440,3 +1440,195 @@ header {
 
   .perfil-avatar-wrap, .perfil-avatar, .perfil-avatar-placeholder { width: 84px; height: 84px; }
 }
+/* ============================================================
+   DASHBOARD FINANCEIRO — Próximos Pagamentos, Críticas, Indicadores
+   ============================================================ */
+
+.geral-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.filtro-select {
+  background: var(--card2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.75rem;
+  padding: 9px 14px;
+  border-radius: 100px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color .2s;
+}
+
+.filtro-select:hover, .filtro-select:focus { border-color: var(--accent); }
+
+/* ── Próximos Pagamentos ── */
+.pagamentos-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pagamento-item {
+  display: grid;
+  grid-template-columns: 4px 1fr auto auto;
+  align-items: center;
+  gap: 16px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 18px;
+  cursor: pointer;
+  transition: all .2s;
+  --cor: var(--accent2);
+}
+
+.pagamento-item:hover { border-color: #444455; transform: translateX(2px); }
+
+.pagamento-item.pink { --cor: var(--accent3); }
+.pagamento-item.gold { --cor: #f0a060; }
+.pagamento-item.blue { --cor: var(--accent2); }
+
+.pagamento-dot { align-self: stretch; border-radius: 4px; background: var(--cor); }
+
+.pagamento-info { min-width: 0; }
+.pagamento-titulo { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pagamento-sub { font-size: 0.68rem; color: #888899; margin-top: 3px; letter-spacing: .5px; }
+
+.pagamento-dias {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 100px;
+  white-space: nowrap;
+  color: var(--cor);
+  background: rgba(255,255,255,.06);
+  border: 1px solid var(--cor);
+}
+
+.pagamento-valor { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 0.92rem; white-space: nowrap; }
+
+.geral-mais-nota { text-align: center; font-size: 0.7rem; color: #666688; margin-top: 12px; }
+
+/* ── Dívidas Críticas ── */
+.criticas-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.critica-card {
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--linha-cor, var(--accent2));
+  border-radius: 14px;
+  padding: 20px;
+  cursor: pointer;
+  transition: all .2s;
+}
+
+.critica-card:hover { transform: translateY(-2px); border-color: var(--linha-cor, var(--accent2)); }
+.critica-card.pink { --linha-cor: var(--accent3); }
+.critica-card.gold { --linha-cor: #f0a060; }
+.critica-card.blue { --linha-cor: var(--accent2); }
+
+.critica-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 12px; }
+.critica-titulo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1rem; }
+.critica-prioridade {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 100px;
+  color: var(--linha-cor, var(--accent2));
+  background: rgba(255,255,255,.06);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.critica-stats { display: flex; flex-direction: column; gap: 6px; font-size: 0.74rem; color: #aaaabb; }
+.critica-stats b { color: var(--text); }
+
+/* ── Indicadores textuais ── */
+.indicadores-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.indicador-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 18px;
+}
+
+.indicador-icone { font-size: 1.3rem; flex-shrink: 0; }
+.indicador-texto { font-size: 0.78rem; color: #ccccd8; line-height: 1.5; }
+.indicador-texto strong { color: var(--accent); }
+
+/* ── Dívidas quitadas: resumo clicável ── */
+.quitadas-resumo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: var(--card);
+  border: 1px solid rgba(200,240,96,.3);
+  border-radius: 16px;
+  padding: 20px 24px;
+  margin-bottom: 32px;
+  cursor: pointer;
+  transition: all .2s;
+}
+
+.quitadas-resumo:hover { border-color: var(--accent); transform: translateY(-2px); }
+.quitadas-resumo-left { display: flex; align-items: center; gap: 14px; }
+.quitadas-resumo-icone { font-size: 1.8rem; }
+.quitadas-resumo-titulo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1rem; }
+.quitadas-resumo-sub { font-size: 0.72rem; color: #888899; margin-top: 2px; }
+.quitadas-resumo-seta { color: var(--accent); font-size: 1.1rem; }
+
+/* ── Distribuição das dívidas: barra dentro do breakdown-item ── */
+.breakdown-item { flex-direction: column; align-items: stretch; gap: 8px; }
+.breakdown-item-top { display: flex; align-items: center; gap: 10px; }
+.breakdown-bar-track { height: 6px; background: #1e1e2e; border-radius: 100px; overflow: hidden; }
+.breakdown-bar-fill { height: 100%; border-radius: 100px; transition: width .8s cubic-bezier(.16,1,.3,1); }
+
+.geral-empty-mini {
+  text-align: center;
+  font-size: 0.75rem;
+  color: #666688;
+  padding: 24px;
+  border: 1.5px dashed var(--border);
+  border-radius: 14px;
+}
+
+/* ── Responsividade do dashboard financeiro ── */
+@media (max-width: 768px) {
+  .pagamento-item { grid-template-columns: 4px 1fr auto; row-gap: 6px; }
+  .pagamento-valor { grid-column: 3; }
+  .pagamento-dias { grid-column: 3; justify-self: end; }
+  .criticas-grid { grid-template-columns: 1fr; }
+  .indicadores-grid { grid-template-columns: 1fr; }
+  .quitadas-resumo { padding: 16px 18px; }
+  .geral-section-header { flex-direction: column; align-items: stretch; }
+  .filtro-select { width: 100%; }
+}
+
+@media (max-width: 480px) {
+  .pagamento-item { grid-template-columns: 4px 1fr; padding: 12px 14px; }
+  .pagamento-dias, .pagamento-valor { grid-column: 2; justify-self: start; }
+  .pagamento-titulo { white-space: normal; }
+}

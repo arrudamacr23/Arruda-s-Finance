@@ -548,6 +548,122 @@ function calcPrevisaoQuitacaoTotal() {
   };
 }
 
+/* ============================================================
+   DASHBOARD FINANCEIRO — cálculos agregados (Visão Geral)
+   ============================================================ */
+
+/* filtro de período ativo na seção "Próximos Pagamentos" */
+let filtroPeriodoGeral = 'tudo';
+
+/* resumo consolidado de TODAS as dívidas — base dos cards principais */
+function calcResumoGeralDashboard() {
+  const ativas = dividas.filter(d => !isQuitada(d));
+  const quitadas = dividas.filter(isQuitada);
+
+  let totalGeral = 0, totalPagoGeral = 0, atrasadasGeral = 0, valorAtrasadoGeral = 0;
+  dividas.forEach(d => {
+    const c = calcDivida(d);
+    totalGeral += c.total;
+    totalPagoGeral += c.descontado;
+    atrasadasGeral += c.numAtrasadas;
+    valorAtrasadoGeral += c.valorAtrasado;
+  });
+
+  const restanteGeral = totalGeral - totalPagoGeral;
+  const pctQuitadoGeral = totalGeral ? Math.round((totalPagoGeral / totalGeral) * 100) : 0;
+
+  return {
+    totalGeral, totalPagoGeral, restanteGeral, pctQuitadoGeral,
+    qtdAtivas: ativas.length, qtdQuitadas: quitadas.length,
+    atrasadasGeral, valorAtrasadoGeral,
+  };
+}
+
+/* janela de meses (chave = ano*12+mesIdx) coberta por cada opção do filtro de período.
+   Atrasadas sempre aparecem, independente da janela — ver calcProximosPagamentos. */
+function janelaFiltroPeriodo(filtro, chaveAtual, anoAtual) {
+  switch (filtro) {
+    case 'este_mes':    return { min: chaveAtual, max: chaveAtual };
+    case 'proximo_mes': return { min: chaveAtual + 1, max: chaveAtual + 1 };
+    case 'ultimos_3':   return { min: chaveAtual, max: chaveAtual + 2 };
+    case 'ultimos_6':   return { min: chaveAtual, max: chaveAtual + 5 };
+    case 'este_ano':    return { min: anoAtual * 12, max: anoAtual * 12 + 11 };
+    default:            return null; // 'tudo' — sem restrição
+  }
+}
+
+/* lista achatada de todas as parcelas não pagas, com a dívida-mãe anexada */
+function listarParcelasPendentes() {
+  const lista = [];
+  dividas.forEach(d => {
+    d.parcelas.forEach(p => { if (!p.paga) lista.push({ divida: d, parcela: p }); });
+  });
+  return lista;
+}
+
+/* próximas parcelas a vencer (atrasadas sempre primeiro), respeitando o filtro de período */
+function calcProximosPagamentos(filtro = 'tudo', limite = 8) {
+  const { mesIdx, ano } = hojeInfo();
+  const chaveAtual = ano * 12 + mesIdx;
+  const janela = janelaFiltroPeriodo(filtro, chaveAtual, ano);
+  const hojeSemHora = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+
+  const todas = listarParcelasPendentes()
+    .map(({ divida, parcela }) => {
+      const chave = chaveData(parcela);
+      const atrasada = isAtrasada(parcela);
+      const dataRef = new Date(parcela.ano, MESES.indexOf(parcela.mes), 1);
+      const diasDiff = Math.round((dataRef - hojeSemHora) / 86400000);
+      return { divida, parcela, chave, atrasada, diasDiff };
+    })
+    .filter(item => item.atrasada || !janela || (item.chave >= janela.min && item.chave <= janela.max));
+
+  todas.sort((a, b) => (a.atrasada !== b.atrasada) ? (a.atrasada ? -1 : 1) : (a.chave - b.chave));
+
+  return { itens: todas.slice(0, limite), total: todas.length };
+}
+
+/* ranking das dívidas que mais merecem atenção (atraso > % restante > proximidade) */
+function calcDividasCriticas(limite = 5) {
+  const ativas = dividas.filter(d => !isQuitada(d));
+  const comMetricas = ativas.map(d => {
+    const c = calcDivida(d);
+    const pctRestante = c.total ? 100 - c.pct : 100;
+    const score = c.numAtrasadas * 100000 + c.valorAtrasado * 10 + pctRestante;
+    let prioridade, cor;
+    if (c.numAtrasadas > 0) { prioridade = 'Alta';  cor = 'pink'; }
+    else if (c.pct < 50)    { prioridade = 'Média'; cor = 'gold'; }
+    else                     { prioridade = 'Baixa'; cor = 'blue'; }
+    const prox = c.proxIdx >= 0 ? d.parcelas[c.proxIdx] : null;
+    return { divida: d, ...c, pctRestante, score, prioridade, cor, prox };
+  });
+  comMetricas.sort((a, b) => b.score - a.score);
+  return comMetricas.slice(0, limite);
+}
+
+/* quanto cada dívida ativa representa do total restante geral */
+function calcDistribuicaoDividas() {
+  const itens = dividas.filter(d => !isQuitada(d)).map(d => ({
+    titulo: d.titulo,
+    restante: calcDivida(d).restante,
+  })).filter(x => x.restante > 0);
+
+  const totalRestante = itens.reduce((s, x) => s + x.restante, 0);
+  itens.sort((a, b) => b.restante - a.restante);
+
+  return itens.map(x => ({ ...x, pct: totalRestante ? Math.round((x.restante / totalRestante) * 100) : 0 }));
+}
+
+const CORES_DISTRIBUICAO = ['#c8f060', '#60f0c8', '#f060a8', '#f0a060', '#60a8f0', '#a860f0', '#f0e060', '#e08060'];
+
+/* navega para a aba de uma dívida específica (usado pelos cliques na dashboard) */
+function irParaDivida(dividaId) {
+  showDividasView();
+  activeTabId = dividaId;
+  renderTabs();
+  renderContent();
+}
+
 function renderVisaoGeral() {
   const container = document.getElementById('geral-content');
 
@@ -578,6 +694,13 @@ function renderVisaoGeral() {
 
   const meses = calcProximosMeses(6);
   const maiorMes = Math.max(1, temSalario ? salario : 0, ...meses.map(m => m.total));
+
+  /* ── novos cálculos do dashboard ── */
+  const resumo = calcResumoGeralDashboard();
+  const proximosPagamentos = calcProximosPagamentos(filtroPeriodoGeral, 8);
+  const dividasCriticas = calcDividasCriticas(5);
+  const distribuicao = calcDistribuicaoDividas();
+  const quitadasLista = dividas.filter(isQuitada);
 
   /* ── Cabeçalho: banner de saúde financeira, ou CTA para cadastrar salário ── */
   let saudeHtml;
@@ -610,29 +733,155 @@ function renderVisaoGeral() {
       </div>`;
   }
 
+  /* ── indicadores textuais dinâmicos ── */
+  const proximoGeral = proximosPagamentos.itens[0] || null;
+  const indicadoresTextuais = [
+    { icone: '📊', html: `Você já quitou <strong>${resumo.pctQuitadoGeral}%</strong> das suas dívidas.` },
+    { icone: '💰', html: resumo.restanteGeral > 0 ? `Faltam <strong>R$ ${resumo.restanteGeral.toLocaleString('pt-BR')}</strong> para quitar tudo.` : `Todas as dívidas cadastradas já estão quitadas 🎉` },
+    { icone: resumo.atrasadasGeral > 0 ? '⚠️' : '✅', html: resumo.atrasadasGeral > 0 ? `Existem <strong>${resumo.atrasadasGeral}</strong> parcela${resumo.atrasadasGeral !== 1 ? 's' : ''} atrasada${resumo.atrasadasGeral !== 1 ? 's' : ''}.` : `Nenhuma parcela atrasada no momento.` },
+    { icone: '📅', html: proximoGeral ? `Seu próximo pagamento é de <strong>R$ ${proximoGeral.parcela.valor.toLocaleString('pt-BR')}</strong> (${proximoGeral.divida.titulo} · ${proximoGeral.parcela.mes}/${proximoGeral.parcela.ano}).` : `Não há pagamentos pendentes no momento.` },
+  ];
+
+  /* ── seção: próximos pagamentos ── */
+  const opcoesFiltro = [
+    ['tudo', 'Tudo'], ['este_mes', 'Este mês'], ['proximo_mes', 'Próximo mês'],
+    ['ultimos_3', 'Próximos 3 meses'], ['ultimos_6', 'Próximos 6 meses'], ['este_ano', `Este ano (${ano})`],
+  ];
+  const proximosPagamentosHtml = !proximosPagamentos.itens.length
+    ? `<div class="geral-empty-mini">Nenhuma parcela pendente ${filtroPeriodoGeral !== 'tudo' ? 'nesse período' : ''} 🎉</div>`
+    : `
+      <div class="pagamentos-list">
+        ${proximosPagamentos.itens.map(({ divida, parcela, atrasada, diasDiff }) => {
+          const cor = atrasada ? 'pink' : (diasDiff <= 7 ? 'gold' : 'blue');
+          const diasLabel = atrasada
+            ? `Atrasada`
+            : (diasDiff <= 0 ? 'Vence este mês' : `em ${diasDiff} dia${diasDiff !== 1 ? 's' : ''}`);
+          return `
+          <div class="pagamento-item ${cor}" data-id="${divida.id}">
+            <div class="pagamento-dot"></div>
+            <div class="pagamento-info">
+              <div class="pagamento-titulo">${divida.titulo}</div>
+              <div class="pagamento-sub">${parcela.mes}/${parcela.ano}${atrasada ? ' · pagamento em atraso' : ''}</div>
+            </div>
+            <div class="pagamento-dias">${diasLabel}</div>
+            <div class="pagamento-valor">R$ ${parcela.valor.toLocaleString('pt-BR')}</div>
+          </div>`;
+        }).join('')}
+      </div>
+      ${proximosPagamentos.total > proximosPagamentos.itens.length ? `<div class="geral-mais-nota">+ ${proximosPagamentos.total - proximosPagamentos.itens.length} outra${(proximosPagamentos.total - proximosPagamentos.itens.length) !== 1 ? 's' : ''} parcela${(proximosPagamentos.total - proximosPagamentos.itens.length) !== 1 ? 's' : ''} no período selecionado</div>` : ''}
+    `;
+
+  /* ── seção: dívidas mais críticas ── */
+  const criticasHtml = !dividasCriticas.length
+    ? `<div class="geral-empty-mini">Nenhuma dívida ativa no momento 🎉</div>`
+    : `
+      <div class="criticas-grid">
+        ${dividasCriticas.map(c => `
+          <div class="critica-card ${c.cor}" data-id="${c.divida.id}">
+            <div class="critica-top">
+              <div class="critica-titulo">${c.divida.titulo}</div>
+              <div class="critica-prioridade">${c.prioridade}</div>
+            </div>
+            <div class="critica-stats">
+              ${c.numAtrasadas > 0 ? `<span>⚠️ <b>${c.numAtrasadas}</b> parcela${c.numAtrasadas !== 1 ? 's' : ''} atrasada${c.numAtrasadas !== 1 ? 's' : ''} · <b>R$ ${c.valorAtrasado.toLocaleString('pt-BR')}</b></span>` : `<span>✓ nenhuma parcela atrasada</span>`}
+              <span>📉 <b>${c.pctRestante}%</b> ainda restante</span>
+              <span>📅 próxima parcela: <b>${c.prox ? `${c.prox.mes}/${c.prox.ano}` : '—'}</b></span>
+            </div>
+          </div>`).join('')}
+      </div>
+    `;
+
+  /* ── seção: distribuição das dívidas ── */
+  const distribuicaoHtml = !distribuicao.length
+    ? `<div class="geral-empty-mini">Nenhum saldo restante para distribuir 🎉</div>`
+    : `
+      <div class="breakdown-grid">
+        ${distribuicao.map((x, i) => {
+          const cor = CORES_DISTRIBUICAO[i % CORES_DISTRIBUICAO.length];
+          return `
+          <div class="breakdown-item">
+            <div class="breakdown-item-top">
+              <div class="breakdown-dot" style="background:${cor}"></div>
+              <div class="breakdown-name">${x.titulo}</div>
+              <div class="breakdown-val">${x.pct}%</div>
+            </div>
+            <div class="breakdown-bar-track">
+              <div class="breakdown-bar-fill" style="width:${x.pct}%; background:${cor}"></div>
+            </div>
+            <div class="breakdown-val" style="font-size:.7rem; color:#888899; font-weight:400;">R$ ${x.restante.toLocaleString('pt-BR')} restantes</div>
+          </div>`;
+        }).join('')}
+      </div>
+    `;
+
   container.innerHTML = `
     ${saudeHtml}
 
+    <div class="progress-section">
+      <div class="section-title">Progresso Geral de Quitação</div>
+      <div class="progress-header">
+        <span class="progress-label">R$ ${resumo.totalPagoGeral.toLocaleString('pt-BR')} pagos de R$ ${resumo.totalGeral.toLocaleString('pt-BR')}</span>
+        <span class="progress-pct">${resumo.pctQuitadoGeral}%</span>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill" style="width:${resumo.pctQuitadoGeral}%"></div>
+      </div>
+      <div class="progress-info">
+        <span>R$ ${resumo.totalPagoGeral.toLocaleString('pt-BR')} pagos</span>
+        <span>R$ ${resumo.restanteGeral.toLocaleString('pt-BR')} restantes</span>
+      </div>
+    </div>
+
+    <div class="section-title">Resumo Financeiro</div>
     <div class="stats-grid">
       <div class="stat-card blue">
-        <div class="stat-label">Total Geral (todas as dívidas)</div>
-        <div class="stat-value">R$ ${totalGeral.toLocaleString('pt-BR')}</div>
+        <div class="stat-label">Total das Dívidas</div>
+        <div class="stat-value">R$ ${resumo.totalGeral.toLocaleString('pt-BR')}</div>
         <div class="stat-sub">${dividas.length} dívida${dividas.length !== 1 ? 's' : ''} cadastrada${dividas.length !== 1 ? 's' : ''}</div>
       </div>
+      <div class="stat-card green">
+        <div class="stat-label">Total Já Pago</div>
+        <div class="stat-value">R$ ${resumo.totalPagoGeral.toLocaleString('pt-BR')}</div>
+        <div class="stat-sub">em todo o período</div>
+      </div>
       <div class="stat-card blue">
-        <div class="stat-label">Saldo Restante Geral</div>
-        <div class="stat-value">R$ ${restanteTotal.toLocaleString('pt-BR')}</div>
+        <div class="stat-label">Total Restante</div>
+        <div class="stat-value">R$ ${resumo.restanteGeral.toLocaleString('pt-BR')}</div>
         <div class="stat-sub">somando todas as dívidas ativas</div>
       </div>
+      <div class="stat-card green">
+        <div class="stat-label">% Já Quitado</div>
+        <div class="stat-value">${resumo.pctQuitadoGeral}%</div>
+        <div class="stat-sub">do total geral de dívidas</div>
+      </div>
+      <div class="stat-card blue">
+        <div class="stat-label">Dívidas Ativas</div>
+        <div class="stat-value">${resumo.qtdAtivas}</div>
+        <div class="stat-sub">ainda com parcelas em aberto</div>
+      </div>
+      <div class="stat-card green">
+        <div class="stat-label">Dívidas Quitadas</div>
+        <div class="stat-value">${resumo.qtdQuitadas}</div>
+        <div class="stat-sub">totalmente pagas</div>
+      </div>
+      <div class="stat-card ${resumo.atrasadasGeral > 0 ? 'pink' : 'blue'}">
+        <div class="stat-label">Parcelas Atrasadas</div>
+        <div class="stat-value">${resumo.atrasadasGeral}</div>
+        <div class="stat-sub">${resumo.atrasadasGeral > 0 ? 'precisam de atenção' : 'nenhuma parcela atrasada 🎉'}</div>
+      </div>
+      <div class="stat-card ${resumo.valorAtrasadoGeral > 0 ? 'pink' : 'blue'}">
+        <div class="stat-label">Valor Total Atrasado</div>
+        <div class="stat-value">R$ ${resumo.valorAtrasadoGeral.toLocaleString('pt-BR')}</div>
+        <div class="stat-sub">soma das parcelas em atraso</div>
+      </div>
+    </div>
+
+    <div class="section-title">Indicadores</div>
+    <div class="stats-grid">
       <div class="stat-card ${temSalario ? (pctComprometido > 50 ? 'pink' : pctComprometido > 30 ? 'gold' : 'green') : 'gold'}">
         <div class="stat-label">Parcelas deste Mês</div>
         <div class="stat-value">R$ ${parcelasMes.toLocaleString('pt-BR')}</div>
         <div class="stat-sub">${temSalario ? `${pctComprometido.toFixed(1)}% da sua renda` : `${MESES[mesIdx]}/${ano} · cadastre o salário p/ ver %`}</div>
-      </div>
-      <div class="stat-card ${atrasadasGeral > 0 ? 'pink' : 'blue'}">
-        <div class="stat-label">Parcelas Atrasadas</div>
-        <div class="stat-value">${atrasadasGeral}</div>
-        <div class="stat-sub">${atrasadasGeral > 0 ? `R$ ${valorAtrasadoGeral.toLocaleString('pt-BR')} em atraso` : 'nenhuma parcela atrasada 🎉'}</div>
       </div>
       <div class="stat-card green">
         <div class="stat-label">Total Pago em ${ano}</div>
@@ -651,6 +900,46 @@ function renderVisaoGeral() {
         <div class="stat-value">${previsaoQuitacao.mesesRestantes <= 0 ? 'Este mês' : `${previsaoQuitacao.mesesRestantes} ${previsaoQuitacao.mesesRestantes === 1 ? 'mês' : 'meses'}`}</div>
         <div class="stat-sub">última parcela prevista: ${previsaoQuitacao.mesFinal}/${previsaoQuitacao.anoFinal}</div>
       </div>` : ''}
+    </div>
+
+    <div class="indicadores-grid" style="margin-bottom:32px;">
+      ${indicadoresTextuais.map(i => `
+        <div class="indicador-card">
+          <div class="indicador-icone">${i.icone}</div>
+          <div class="indicador-texto">${i.html}</div>
+        </div>`).join('')}
+    </div>
+
+    <div class="progress-section">
+      <div class="geral-section-header">
+        <div class="section-title" style="margin-bottom:0;">Próximos Pagamentos</div>
+        <select class="filtro-select" id="select-filtro-periodo">
+          ${opcoesFiltro.map(([val, label]) => `<option value="${val}" ${val === filtroPeriodoGeral ? 'selected' : ''}>${label}</option>`).join('')}
+        </select>
+      </div>
+      ${proximosPagamentosHtml}
+    </div>
+
+    <div class="progress-section">
+      <div class="section-title">Dívidas Mais Críticas</div>
+      ${criticasHtml}
+    </div>
+
+    ${quitadasLista.length ? `
+    <div class="quitadas-resumo" id="quitadas-resumo-card">
+      <div class="quitadas-resumo-left">
+        <div class="quitadas-resumo-icone">🏆</div>
+        <div>
+          <div class="quitadas-resumo-titulo">${quitadasLista.length} dívida${quitadasLista.length !== 1 ? 's' : ''} quitada${quitadasLista.length !== 1 ? 's' : ''}</div>
+          <div class="quitadas-resumo-sub">Clique para ver os detalhes</div>
+        </div>
+      </div>
+      <div class="quitadas-resumo-seta">→</div>
+    </div>` : ''}
+
+    <div class="progress-section" style="margin-top:32px;">
+      <div class="section-title">Distribuição das Dívidas (saldo restante)</div>
+      ${distribuicaoHtml}
     </div>
 
     <div class="progress-section">
@@ -676,6 +965,23 @@ function renderVisaoGeral() {
 
   const btnIrPerfil = document.getElementById('btn-geral-ir-perfil');
   if (btnIrPerfil) btnIrPerfil.addEventListener('click', showPerfilView);
+
+  const selectFiltro = document.getElementById('select-filtro-periodo');
+  if (selectFiltro) {
+    selectFiltro.addEventListener('change', (e) => {
+      filtroPeriodoGeral = e.target.value;
+      renderVisaoGeral();
+    });
+  }
+
+  container.querySelectorAll('.pagamento-item').forEach(el => {
+    el.addEventListener('click', () => irParaDivida(el.dataset.id));
+  });
+  container.querySelectorAll('.critica-card').forEach(el => {
+    el.addEventListener('click', () => irParaDivida(el.dataset.id));
+  });
+  const quitadasCard = document.getElementById('quitadas-resumo-card');
+  if (quitadasCard) quitadasCard.addEventListener('click', () => irParaDivida('__quitadas__'));
 }
 
 /* ── Tabs ── */
