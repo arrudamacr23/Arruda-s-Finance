@@ -1987,3 +1987,60 @@ header {
   .meta-card-top { flex-direction: column; }
   .meta-card-actions { flex-direction: row; }
 }
+
+/* ============================================================
+   RECEITAS E DESPESAS (LANÇAMENTOS)
+   ============================================================ */
+
+.lanc-item {
+  display: grid;
+  grid-template-columns: 34px 1fr auto auto;
+  align-items: center;
+  gap: 14px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 13px 18px;
+  cursor: pointer;
+  transition: all .2s;
+}
+
+.lanc-item:hover { border-color: var(--accent); transform: translateX(2px); }
+
+.lanc-tipo-badge {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.lanc-tipo-badge.receita { background: rgba(200,240,96,.12); }
+.lanc-tipo-badge.despesa { background: rgba(240,96,168,.12); }
+
+.lanc-btn-excluir {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: #888899;
+  font-size: 0.8rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .15s;
+}
+
+.lanc-btn-excluir:hover { border-color: var(--accent3); color: var(--accent3); background: rgba(240,96,168,.08); }
+
+/* ── Responsividade ── */
+@media (max-width: 640px) {
+  .lanc-item { grid-template-columns: 30px 1fr auto; row-gap: 6px; }
+  .lanc-btn-excluir { grid-column: 3; grid-row: 1 / span 2; align-self: center; }
+}

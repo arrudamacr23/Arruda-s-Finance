@@ -57,6 +57,7 @@
         </div>
       </div>
       <button class="btn-back" id="btn-geral">📊 Geral</button>
+      <button class="btn-back" id="btn-lancamentos">💵 Lançamentos</button>
       <button class="btn-back" id="btn-historico">🕓 Histórico</button>
       <button class="btn-back" id="btn-metas">🎯 Metas</button>
       <button class="btn-back" id="btn-perfil">👤 Perfil</button>
@@ -111,6 +112,21 @@
       </div>
     </div>
     <div id="metas-content"></div>
+  </div>
+
+  <!-- View: Receitas e Despesas -->
+  <div id="view-lancamentos" style="display:none;">
+    <div class="dashboard-header">
+      <div>
+        <h2 class="dashboard-title">Lançamentos</h2>
+        <div class="dashboard-badge">Receitas e despesas do dia a dia</div>
+      </div>
+      <div class="dashboard-actions">
+        <button class="btn-primary" id="btn-novo-lancamento">+ Novo Lançamento</button>
+        <button class="btn-back" id="btn-voltar-dividas-lancamentos">← Voltar para Dívidas</button>
+      </div>
+    </div>
+    <div id="lancamentos-content"></div>
   </div>
 
   <!-- View: Perfil -->
@@ -370,6 +386,50 @@
     <div class="modal-actions">
       <button class="btn-secondary" id="btn-cancelar-meta">Cancelar</button>
       <button class="btn-primary" id="btn-salvar-meta">Salvar Meta</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: criar/editar lançamento (receita ou despesa) -->
+<div class="modal-overlay" id="lancamento-overlay">
+  <div class="modal">
+    <div class="modal-title" id="lancamento-modal-title">Novo Lançamento</div>
+
+    <div class="modo-divida-toggle">
+      <button type="button" class="modo-divida-btn active" id="btn-lanc-tipo-receita" data-tipo="receita">💰 Receita</button>
+      <button type="button" class="modo-divida-btn" id="btn-lanc-tipo-despesa" data-tipo="despesa">💸 Despesa</button>
+    </div>
+
+    <label class="modal-label">Descrição</label>
+    <input type="text" id="input-lanc-descricao" class="modal-input" placeholder="Ex: Salário de Agosto" />
+
+    <div class="modal-row">
+      <div class="modal-col">
+        <label class="modal-label">Valor (R$)</label>
+        <input type="number" id="input-lanc-valor" class="modal-input" min="0" step="0.01" placeholder="Ex: 3500" />
+      </div>
+      <div class="modal-col">
+        <label class="modal-label">Data</label>
+        <input type="date" id="input-lanc-data" class="modal-input" />
+      </div>
+    </div>
+
+    <label class="modal-label">Categoria</label>
+    <select id="select-lanc-categoria" class="modal-input"></select>
+
+    <label class="modal-check-row">
+      <input type="checkbox" id="input-lanc-recorrente" />
+      <span>Recorrente (repete todo mês a partir dessa data, até você editar ou excluir)</span>
+    </label>
+
+    <label class="modal-label">Observação (opcional)</label>
+    <textarea id="input-lanc-observacao" class="modal-input" rows="2" placeholder="Detalhes adicionais"></textarea>
+
+    <p class="modal-hint">💡 Pagamentos de parcelas de dívidas já são somados automaticamente no saldo — não lance aqui pra evitar contar duas vezes.</p>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" id="btn-cancelar-lancamento">Cancelar</button>
+      <button class="btn-primary" id="btn-salvar-lancamento">Salvar Lançamento</button>
     </div>
   </div>
 </div>

@@ -10,6 +10,7 @@ let activeTabId = null;
 let currentUser = null;
 let perfilAtual = null; // { telefone, profissao, salario, foto_base64 }
 let metas = [];
+let lancamentos = [];
 
 /* ── Estado vazio reutilizável (ícone + título + subtítulo + CTA opcional) ── */
 function emptyStateHtml({ icon = '📂', title, subtitle = '', ctaLabel = null, ctaId = null }) {
@@ -118,6 +119,7 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
     activeTabId = null;
     perfilAtual = null;
     metas = [];
+    lancamentos = [];
     notificacoesLidas = new Set();
     notificacoesAtuais = [];
     fecharPainelNotificacoes();
@@ -189,6 +191,7 @@ async function iniciarApp() {
   await loadPerfil();
   await loadNotificacoesLidas();
   await loadMetas();
+  await loadLancamentos();
   activeTabId = dividas.length ? dividas[0].id : null;
   renderTabs();
   renderContent();
@@ -719,54 +722,48 @@ function fadeInView(el) {
   el.classList.add('view-fade-in');
 }
 
+const TODAS_AS_VIEWS = ['view-dividas', 'view-perfil', 'view-geral', 'view-historico', 'view-metas', 'view-lancamentos'];
+
+function mostrarView(idAlvo) {
+  TODAS_AS_VIEWS.forEach(id => {
+    document.getElementById(id).style.display = (id === idAlvo) ? 'block' : 'none';
+  });
+}
+
 function showDividasView() {
-  document.getElementById('view-dividas').style.display = 'block';
-  document.getElementById('view-perfil').style.display = 'none';
-  document.getElementById('view-geral').style.display = 'none';
-  document.getElementById('view-historico').style.display = 'none';
-  document.getElementById('view-metas').style.display = 'none';
+  mostrarView('view-dividas');
   fadeInView(document.getElementById('view-dividas'));
 }
 
 function showPerfilView() {
-  document.getElementById('view-dividas').style.display = 'none';
-  document.getElementById('view-perfil').style.display = 'block';
-  document.getElementById('view-geral').style.display = 'none';
-  document.getElementById('view-historico').style.display = 'none';
-  document.getElementById('view-metas').style.display = 'none';
+  mostrarView('view-perfil');
   renderPerfilForm();
   renderResumoFinanceiro();
   fadeInView(document.getElementById('view-perfil'));
 }
 
 function showGeralView() {
-  document.getElementById('view-dividas').style.display = 'none';
-  document.getElementById('view-perfil').style.display = 'none';
-  document.getElementById('view-geral').style.display = 'block';
-  document.getElementById('view-historico').style.display = 'none';
-  document.getElementById('view-metas').style.display = 'none';
+  mostrarView('view-geral');
   renderVisaoGeral();
   fadeInView(document.getElementById('view-geral'));
 }
 
 function showHistoricoView() {
-  document.getElementById('view-dividas').style.display = 'none';
-  document.getElementById('view-perfil').style.display = 'none';
-  document.getElementById('view-geral').style.display = 'none';
-  document.getElementById('view-historico').style.display = 'block';
-  document.getElementById('view-metas').style.display = 'none';
+  mostrarView('view-historico');
   renderHistorico();
   fadeInView(document.getElementById('view-historico'));
 }
 
 function showMetasView() {
-  document.getElementById('view-dividas').style.display = 'none';
-  document.getElementById('view-perfil').style.display = 'none';
-  document.getElementById('view-geral').style.display = 'none';
-  document.getElementById('view-historico').style.display = 'none';
-  document.getElementById('view-metas').style.display = 'block';
+  mostrarView('view-metas');
   renderMetas();
   fadeInView(document.getElementById('view-metas'));
+}
+
+function showLancamentosView() {
+  mostrarView('view-lancamentos');
+  renderLancamentos();
+  fadeInView(document.getElementById('view-lancamentos'));
 }
 
 /* soma, para cada uma das próximas `qtdMeses` (a partir do mês atual),
@@ -934,11 +931,11 @@ function irParaDivida(dividaId) {
 function renderVisaoGeral() {
   const container = document.getElementById('geral-content');
 
-  if (!dividas.length) {
+  if (!dividas.length && !lancamentos.length) {
     container.innerHTML = emptyStateHtml({
       icon: '📊',
-      title: 'Nenhuma dívida cadastrada ainda',
-      subtitle: 'Cadastre sua primeira dívida na aba "Dívidas" pra começar a ver seu painel completo aqui.',
+      title: 'Nenhuma dívida ou lançamento cadastrado ainda',
+      subtitle: 'Cadastre uma dívida na aba "Dívidas" ou uma receita/despesa em "Lançamentos" pra começar a ver seu painel completo aqui.',
     });
     return;
   }
@@ -968,6 +965,9 @@ function renderVisaoGeral() {
   const dividasCriticas = calcDividasCriticas(5);
   const distribuicao = calcDistribuicaoDividas();
   const quitadasLista = dividas.filter(isQuitada);
+
+  /* ── receitas / despesas / dívidas pagas / saldo do mês atual (item 4) ── */
+  const fluxoMesAtual = calcFluxoCaixaMes(ano, mesIdx);
 
   /* ── Cabeçalho: banner de saúde financeira, ou CTA para cadastrar salário ── */
   let saudeHtml;
@@ -1083,6 +1083,33 @@ function renderVisaoGeral() {
 
   container.innerHTML = `
     ${saudeHtml}
+
+    <div class="geral-section-header">
+      <div class="section-title" style="margin-bottom:0;">Fluxo de Caixa do Mês (${MESES[mesIdx]}/${ano})</div>
+      <button class="btn-secondary" id="btn-geral-ir-lancamentos">💵 Ver Lançamentos</button>
+    </div>
+    <div class="stats-grid" style="margin-bottom:32px;">
+      <div class="stat-card green">
+        <div class="stat-label">Receitas do Mês</div>
+        <div class="stat-value">R$ ${fluxoMesAtual.receitas.toLocaleString('pt-BR')}</div>
+        <div class="stat-sub">lançamentos de receita ativos este mês</div>
+      </div>
+      <div class="stat-card pink">
+        <div class="stat-label">Despesas do Mês</div>
+        <div class="stat-value">R$ ${fluxoMesAtual.despesas.toLocaleString('pt-BR')}</div>
+        <div class="stat-sub">lançamentos de despesa ativos este mês</div>
+      </div>
+      <div class="stat-card blue">
+        <div class="stat-label">Dívidas Pagas no Mês</div>
+        <div class="stat-value">R$ ${fluxoMesAtual.dividasPagas.toLocaleString('pt-BR')}</div>
+        <div class="stat-sub">parcelas efetivamente pagas este mês</div>
+      </div>
+      <div class="stat-card ${fluxoMesAtual.saldo >= 0 ? 'green' : 'pink'}">
+        <div class="stat-label">Saldo do Mês</div>
+        <div class="stat-value">R$ ${fluxoMesAtual.saldo.toLocaleString('pt-BR')}</div>
+        <div class="stat-sub">receitas − despesas − dívidas pagas</div>
+      </div>
+    </div>
 
     <div class="progress-section">
       <div class="section-title">Progresso Geral de Quitação</div>
@@ -1232,6 +1259,9 @@ function renderVisaoGeral() {
 
   const btnIrPerfil = document.getElementById('btn-geral-ir-perfil');
   if (btnIrPerfil) btnIrPerfil.addEventListener('click', showPerfilView);
+
+  const btnIrLancamentos = document.getElementById('btn-geral-ir-lancamentos');
+  if (btnIrLancamentos) btnIrLancamentos.addEventListener('click', showLancamentosView);
 
   const selectFiltro = document.getElementById('select-filtro-periodo');
   if (selectFiltro) {
@@ -1565,6 +1595,400 @@ async function excluirMeta(id) {
   metas = metas.filter(x => x.id !== id);
   renderMetas();
   showToast(`Meta "${m.nome}" excluída`);
+}
+
+/* ============================================================
+   RECEITAS E DESPESAS (LANÇAMENTOS)
+   ============================================================
+   Uma única tabela `lancamentos` guarda tanto receitas quanto
+   despesas (diferenciadas pela coluna `tipo`) — os campos são
+   idênticos nos dois casos, então duas tabelas separadas só
+   duplicariam schema, RLS e queries sem necessidade real.
+
+   Pagamentos de parcelas de dívidas NUNCA entram nessa tabela —
+   eles já são a fonte de verdade em `dividas`/`parcelas`, e o
+   cálculo de saldo busca esse valor separadamente (por `pago_em`)
+   pra nunca contar o mesmo pagamento duas vezes.
+
+   RECORRÊNCIA: um lançamento recorrente não gera linhas novas no
+   banco a cada mês — ele guarda só a data em que começou, e o
+   cálculo de "esse lançamento vale pra este mês?" é feito ao vivo
+   (mesma ideia já usada nas metas vinculadas a dívida). Editar ou
+   excluir a linha original afeta todos os meses futuros de uma vez.
+   ============================================================ */
+
+const CATEGORIAS_RECEITA = ['Salário', 'Freelancer', 'Comissão', 'Benefício', 'Outros'];
+const CATEGORIAS_DESPESA = ['Alimentação', 'Moradia', 'Transporte', 'Saúde', 'Educação', 'Lazer', 'Compras', 'Contas', 'Outros'];
+
+let tipoLancamentoModal = 'receita'; // 'receita' | 'despesa'
+let lancamentoEmEdicao = null;
+
+let filtroLancTipo = 'todos';
+let filtroLancCategoria = 'todas';
+let filtroLancMes = 'todos';
+let filtroLancAno = 'todos';
+
+async function loadLancamentos() {
+  const { data, error } = await supabaseClient
+    .from('lancamentos')
+    .select('id, tipo, descricao, valor, data, categoria, recorrente, observacao, created_at')
+    .order('data', { ascending: false });
+
+  if (error) {
+    // tabela pode ainda não existir num ambiente sem a migração — não trava o app
+    lancamentos = [];
+    return;
+  }
+  lancamentos = data || [];
+}
+
+/* chave ano*12+mês a partir de uma data 'YYYY-MM-DD' */
+function chaveDataISO(dataStr) {
+  const d = new Date(dataStr + 'T00:00:00');
+  return d.getFullYear() * 12 + d.getMonth();
+}
+
+/* um lançamento "vale" pra um mês/ano específico? Recorrente = a partir da
+   data cadastrada, indefinidamente; não recorrente = só no mês exato dele */
+function lancamentoAplicaNoMes(l, ano, mesIdx) {
+  const chaveAlvo = ano * 12 + mesIdx;
+  const chaveLanc = chaveDataISO(l.data);
+  return l.recorrente ? chaveLanc <= chaveAlvo : chaveLanc === chaveAlvo;
+}
+
+function listarLancamentosDoMes(ano, mesIdx) {
+  return lancamentos.filter(l => lancamentoAplicaNoMes(l, ano, mesIdx));
+}
+
+/* soma das parcelas efetivamente PAGAS (por pago_em) num mês — é isso, e só
+   isso, que representa dinheiro que realmente saiu do bolso com dívidas.
+   Não usa o mês/ano nominal da parcela, pra não confundir "venceu esse mês"
+   com "foi pago esse mês" (essa distinção já existe no Histórico). */
+function calcDividasPagasNoMes(ano, mesIdx) {
+  let total = 0;
+  dividas.forEach(d => d.parcelas.forEach(p => {
+    if (p.paga && p.pago_em) {
+      const dp = new Date(p.pago_em);
+      if (dp.getFullYear() === ano && dp.getMonth() === mesIdx) total += p.valor;
+    }
+  }));
+  return total;
+}
+
+/* Receitas / Despesas / Dívidas pagas / Saldo de um mês específico.
+   Saldo = receitas - despesas - pagamentos de dívidas (nunca soma o
+   mesmo pagamento em mais de um termo, já que dívidas não viram lançamento) */
+function calcFluxoCaixaMes(ano, mesIdx) {
+  const doMes = listarLancamentosDoMes(ano, mesIdx);
+  const receitas = doMes.filter(l => l.tipo === 'receita').reduce((s, l) => s + l.valor, 0);
+  const despesas = doMes.filter(l => l.tipo === 'despesa').reduce((s, l) => s + l.valor, 0);
+  const dividasPagas = calcDividasPagasNoMes(ano, mesIdx);
+  const saldo = receitas - despesas - dividasPagas;
+  return { receitas, despesas, dividasPagas, saldo };
+}
+
+/* últimos `qtdMeses` (incluindo o atual), do mais antigo pro mais recente */
+function calcEvolucaoSaldo(qtdMeses = 6) {
+  const { mesIdx, ano } = hojeInfo();
+  const chaveAtual = ano * 12 + mesIdx;
+  const resultado = [];
+  for (let i = qtdMeses - 1; i >= 0; i--) {
+    const chave = chaveAtual - i;
+    const anoM = Math.floor(chave / 12);
+    const mesM = ((chave % 12) + 12) % 12;
+    resultado.push({ ano: anoM, mesIdx: mesM, ...calcFluxoCaixaMes(anoM, mesM) });
+  }
+  return resultado;
+}
+
+/* despesas agrupadas por categoria, a partir de uma lista já filtrada de lançamentos */
+function calcDespesasPorCategoria(lista) {
+  const mapa = new Map();
+  lista.filter(l => l.tipo === 'despesa').forEach(l => {
+    mapa.set(l.categoria, (mapa.get(l.categoria) || 0) + l.valor);
+  });
+  const total = [...mapa.values()].reduce((s, v) => s + v, 0);
+  return [...mapa.entries()]
+    .map(([categoria, valor]) => ({ categoria, valor, pct: total ? Math.round((valor / total) * 100) : 0 }))
+    .sort((a, b) => b.valor - a.valor);
+}
+
+function anosDisponiveisLancamentos() {
+  const anos = new Set(lancamentos.map(l => new Date(l.data + 'T00:00:00').getFullYear()));
+  return [...anos].sort((a, b) => b - a);
+}
+
+/* filtros da tela de Lançamentos operam sobre a data real de cada linha —
+   não sobre a projeção de recorrência (que é só pro dashboard/gráficos) */
+function aplicarFiltrosLancamentos(lista) {
+  return lista.filter(l => {
+    if (filtroLancTipo !== 'todos' && l.tipo !== filtroLancTipo) return false;
+    if (filtroLancCategoria !== 'todas' && l.categoria !== filtroLancCategoria) return false;
+    const d = new Date(l.data + 'T00:00:00');
+    if (filtroLancMes !== 'todos' && d.getMonth() !== parseInt(filtroLancMes, 10)) return false;
+    if (filtroLancAno !== 'todos' && d.getFullYear() !== parseInt(filtroLancAno, 10)) return false;
+    return true;
+  });
+}
+
+function renderLancamentos() {
+  const container = document.getElementById('lancamentos-content');
+
+  if (!lancamentos.length) {
+    container.innerHTML = emptyStateHtml({
+      icon: '💵',
+      title: 'Nenhum lançamento cadastrado ainda',
+      subtitle: 'Registre suas receitas e despesas do dia a dia pra ter uma visão financeira completa, além das dívidas.',
+      ctaLabel: '+ Novo Lançamento',
+      ctaId: 'btn-empty-novo-lancamento',
+    });
+    const cta = document.getElementById('btn-empty-novo-lancamento');
+    if (cta) cta.addEventListener('click', () => openLancamentoModal());
+    return;
+  }
+
+  const anosDisponiveis = anosDisponiveisLancamentos();
+  const filtrados = aplicarFiltrosLancamentos(lancamentos)
+    .slice()
+    .sort((a, b) => new Date(b.data) - new Date(a.data));
+
+  const categoriasTodas = [...new Set([...CATEGORIAS_RECEITA, ...CATEGORIAS_DESPESA])].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+  const totalReceitas = filtrados.filter(l => l.tipo === 'receita').reduce((s, l) => s + l.valor, 0);
+  const totalDespesas = filtrados.filter(l => l.tipo === 'despesa').reduce((s, l) => s + l.valor, 0);
+  const saldoFiltrado = totalReceitas - totalDespesas;
+
+  const evolucao = calcEvolucaoSaldo(6);
+  const maiorAbsEvolucao = Math.max(1, ...evolucao.map(m => Math.abs(m.saldo)));
+  const despesasPorCategoria = calcDespesasPorCategoria(filtrados);
+
+  const filtrosHtml = `
+    <div class="historico-filtros">
+      <select class="filtro-select" id="lanc-filtro-tipo">
+        <option value="todos" ${filtroLancTipo === 'todos' ? 'selected' : ''}>Todos os tipos</option>
+        <option value="receita" ${filtroLancTipo === 'receita' ? 'selected' : ''}>💰 Receitas</option>
+        <option value="despesa" ${filtroLancTipo === 'despesa' ? 'selected' : ''}>💸 Despesas</option>
+      </select>
+      <select class="filtro-select" id="lanc-filtro-categoria">
+        <option value="todas">Todas as categorias</option>
+        ${categoriasTodas.map(c => `<option value="${c}" ${filtroLancCategoria === c ? 'selected' : ''}>${c}</option>`).join('')}
+      </select>
+      <select class="filtro-select" id="lanc-filtro-mes">
+        <option value="todos">Todos os meses</option>
+        ${MESES.map((m, i) => `<option value="${i}" ${filtroLancMes === String(i) ? 'selected' : ''}>${m}</option>`).join('')}
+      </select>
+      <select class="filtro-select" id="lanc-filtro-ano">
+        <option value="todos">Todos os anos</option>
+        ${anosDisponiveis.map(a => `<option value="${a}" ${filtroLancAno === String(a) ? 'selected' : ''}>${a}</option>`).join('')}
+      </select>
+    </div>
+  `;
+
+  const resumoHtml = `
+    <div class="stats-grid" style="margin-bottom:32px;">
+      <div class="stat-card green">
+        <div class="stat-label">Receitas no Filtro</div>
+        <div class="stat-value">R$ ${totalReceitas.toLocaleString('pt-BR')}</div>
+        <div class="stat-sub">${filtrados.filter(l => l.tipo === 'receita').length} lançamento(s)</div>
+      </div>
+      <div class="stat-card pink">
+        <div class="stat-label">Despesas no Filtro</div>
+        <div class="stat-value">R$ ${totalDespesas.toLocaleString('pt-BR')}</div>
+        <div class="stat-sub">${filtrados.filter(l => l.tipo === 'despesa').length} lançamento(s)</div>
+      </div>
+      <div class="stat-card ${saldoFiltrado >= 0 ? 'green' : 'pink'}">
+        <div class="stat-label">Saldo no Filtro</div>
+        <div class="stat-value">R$ ${saldoFiltrado.toLocaleString('pt-BR')}</div>
+        <div class="stat-sub">receitas − despesas do período filtrado</div>
+      </div>
+    </div>
+  `;
+
+  const evolucaoHtml = `
+    <div class="mes-bar-list">
+      ${evolucao.map(m => {
+        const positivo = m.saldo >= 0;
+        const largura = Math.max(4, (Math.abs(m.saldo) / maiorAbsEvolucao) * 100);
+        return `
+        <div class="mes-bar-row">
+          <div class="mes-bar-label">${MESES[m.mesIdx].slice(0, 3)}/${String(m.ano).slice(2)}</div>
+          <div class="mes-bar-track">
+            <div class="mes-bar-fill ${positivo ? '' : 'risco'}" style="width:${largura}%"></div>
+          </div>
+          <div class="mes-bar-valor" style="color:${positivo ? 'var(--accent)' : 'var(--accent3)'}">R$ ${m.saldo.toLocaleString('pt-BR')}</div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+
+  const categoriaHtml = !despesasPorCategoria.length
+    ? `<div class="geral-empty-mini">Nenhuma despesa no filtro atual pra distribuir por categoria.</div>`
+    : `
+      <div class="breakdown-grid">
+        ${despesasPorCategoria.map((c, i) => {
+          const cor = CORES_DISTRIBUICAO[i % CORES_DISTRIBUICAO.length];
+          return `
+          <div class="breakdown-item">
+            <div class="breakdown-item-top">
+              <div class="breakdown-dot" style="background:${cor}"></div>
+              <div class="breakdown-name">${c.categoria}</div>
+              <div class="breakdown-val">${c.pct}%</div>
+            </div>
+            <div class="breakdown-bar-track">
+              <div class="breakdown-bar-fill" style="width:${c.pct}%; background:${cor}"></div>
+            </div>
+            <div class="breakdown-val" style="font-size:.7rem; color:#888899; font-weight:400;">R$ ${c.valor.toLocaleString('pt-BR')}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    `;
+
+  const listaHtml = !filtrados.length
+    ? `<div class="geral-empty-mini">Nenhum lançamento encontrado com os filtros selecionados.</div>`
+    : `
+      <div class="historico-list">
+        ${filtrados.map(l => `
+          <div class="lanc-item" data-id="${l.id}">
+            <div class="lanc-tipo-badge ${l.tipo}">${l.tipo === 'receita' ? '💰' : '💸'}</div>
+            <div class="historico-info">
+              <div class="historico-titulo">${l.descricao}</div>
+              <div class="historico-sub">${l.categoria} · ${new Date(l.data + 'T00:00:00').toLocaleDateString('pt-BR')}${l.recorrente ? ' · 🔁 recorrente' : ''}</div>
+            </div>
+            <div class="historico-valor" style="color:${l.tipo === 'receita' ? 'var(--accent)' : 'var(--accent3)'}">${l.tipo === 'receita' ? '+' : '−'} R$ ${l.valor.toLocaleString('pt-BR')}</div>
+            <button class="lanc-btn-excluir" data-id="${l.id}" title="Excluir">🗑️</button>
+          </div>`).join('')}
+      </div>
+    `;
+
+  container.innerHTML = `
+    ${filtrosHtml}
+    ${resumoHtml}
+
+    <div class="progress-section">
+      <div class="section-title">Evolução do Saldo (últimos 6 meses)</div>
+      <div class="timeline-hint">Considera todos os lançamentos (incluindo recorrentes já ativos no mês) menos os pagamentos de dívidas — não é afetado pelos filtros acima</div>
+      ${evolucaoHtml}
+    </div>
+
+    <div class="progress-section">
+      <div class="section-title">Despesas por Categoria</div>
+      ${categoriaHtml}
+    </div>
+
+    <div class="progress-section">
+      <div class="section-title">Todos os Lançamentos</div>
+      <div class="timeline-hint">Clique num lançamento pra editar</div>
+      ${listaHtml}
+    </div>
+  `;
+
+  document.getElementById('lanc-filtro-tipo').addEventListener('change', (e) => { filtroLancTipo = e.target.value; renderLancamentos(); });
+  document.getElementById('lanc-filtro-categoria').addEventListener('change', (e) => { filtroLancCategoria = e.target.value; renderLancamentos(); });
+  document.getElementById('lanc-filtro-mes').addEventListener('change', (e) => { filtroLancMes = e.target.value; renderLancamentos(); });
+  document.getElementById('lanc-filtro-ano').addEventListener('change', (e) => { filtroLancAno = e.target.value; renderLancamentos(); });
+
+  container.querySelectorAll('.lanc-item').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.lanc-btn-excluir')) return;
+      openLancamentoModal(el.dataset.id);
+    });
+  });
+  container.querySelectorAll('.lanc-btn-excluir').forEach(btn => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); excluirLancamento(btn.dataset.id); });
+  });
+}
+
+/* ── Modal: criar/editar lançamento ── */
+function preencherSelectCategoriaLancamento(tipo, valorAtual) {
+  const select = document.getElementById('select-lanc-categoria');
+  const lista = tipo === 'receita' ? CATEGORIAS_RECEITA : CATEGORIAS_DESPESA;
+  select.innerHTML = lista.map(c => `<option value="${c}" ${c === valorAtual ? 'selected' : ''}>${c}</option>`).join('');
+}
+
+function setTipoLancamentoModal(tipo) {
+  tipoLancamentoModal = tipo;
+  document.getElementById('btn-lanc-tipo-receita').classList.toggle('active', tipo === 'receita');
+  document.getElementById('btn-lanc-tipo-despesa').classList.toggle('active', tipo === 'despesa');
+  preencherSelectCategoriaLancamento(tipo, null);
+}
+
+function openLancamentoModal(id = null) {
+  lancamentoEmEdicao = id;
+  const l = id ? lancamentos.find(x => x.id === id) : null;
+
+  document.getElementById('lancamento-modal-title').textContent = l ? 'Editar Lançamento' : 'Novo Lançamento';
+  document.getElementById('input-lanc-descricao').value = l?.descricao || '';
+  document.getElementById('input-lanc-valor').value = l?.valor ?? '';
+  document.getElementById('input-lanc-data').value = l?.data || new Date().toISOString().slice(0, 10);
+  document.getElementById('input-lanc-recorrente').checked = !!l?.recorrente;
+  document.getElementById('input-lanc-observacao').value = l?.observacao || '';
+
+  const tipo = l?.tipo || 'receita';
+  setTipoLancamentoModal(tipo);
+  if (l) preencherSelectCategoriaLancamento(tipo, l.categoria);
+
+  document.getElementById('lancamento-overlay').classList.add('show');
+}
+
+function closeLancamentoModal() {
+  document.getElementById('lancamento-overlay').classList.remove('show');
+  lancamentoEmEdicao = null;
+}
+
+async function salvarLancamento() {
+  const descricao = document.getElementById('input-lanc-descricao').value.trim();
+  if (!descricao) { showToast('Digite uma descrição'); return; }
+
+  const valor = parseFloat(document.getElementById('input-lanc-valor').value);
+  if (isNaN(valor) || valor <= 0) { showToast('Digite um valor válido'); return; }
+
+  const data = document.getElementById('input-lanc-data').value;
+  if (!data) { showToast('Escolha uma data'); return; }
+
+  const categoria = document.getElementById('select-lanc-categoria').value;
+  const recorrente = document.getElementById('input-lanc-recorrente').checked;
+  const observacao = document.getElementById('input-lanc-observacao').value.trim() || null;
+
+  const payload = { tipo: tipoLancamentoModal, descricao, valor, data, categoria, recorrente, observacao, user_id: currentUser.id };
+
+  if (lancamentoEmEdicao) {
+    const { data: row, error } = await supabaseClient
+      .from('lancamentos')
+      .update(payload)
+      .eq('id', lancamentoEmEdicao)
+      .select()
+      .single();
+    if (error) { showToast('Erro ao salvar lançamento: ' + error.message); return; }
+    const idx = lancamentos.findIndex(x => x.id === lancamentoEmEdicao);
+    if (idx !== -1) lancamentos[idx] = row;
+    showToast('Lançamento atualizado.');
+  } else {
+    const { data: row, error } = await supabaseClient
+      .from('lancamentos')
+      .insert(payload)
+      .select()
+      .single();
+    if (error) { showToast('Erro ao criar lançamento: ' + error.message); return; }
+    lancamentos.push(row);
+    showToast(tipoLancamentoModal === 'receita' ? 'Receita adicionada.' : 'Despesa adicionada.');
+  }
+
+  closeLancamentoModal();
+  renderLancamentos();
+}
+
+async function excluirLancamento(id) {
+  const l = lancamentos.find(x => x.id === id);
+  if (!l) return;
+  const ok = confirm(`Excluir o lançamento "${l.descricao}"? Essa ação não pode ser desfeita.`);
+  if (!ok) return;
+
+  const { error } = await supabaseClient.from('lancamentos').delete().eq('id', id);
+  if (error) { showToast('Erro ao excluir lançamento: ' + error.message); return; }
+
+  lancamentos = lancamentos.filter(x => x.id !== id);
+  renderLancamentos();
+  showToast(`Lançamento "${l.descricao}" excluído`);
 }
 
 /* ============================================================
@@ -2447,6 +2871,7 @@ function refreshViewAtual() {
   if (document.getElementById('view-historico').style.display === 'block') renderHistorico();
   else if (document.getElementById('view-geral').style.display === 'block') renderVisaoGeral();
   else if (document.getElementById('view-metas').style.display === 'block') renderMetas();
+  else if (document.getElementById('view-lancamentos').style.display === 'block') renderLancamentos();
 }
 
 async function salvarEdicaoParcela() {
@@ -2891,6 +3316,18 @@ document.getElementById('select-meta-categoria').addEventListener('change', (e) 
   inputOutra.style.display = e.target.value === 'outra' ? 'block' : 'none';
   if (e.target.value === 'outra') inputOutra.focus();
 });
+
+/* ── Receitas e Despesas (Lançamentos) ── */
+document.getElementById('btn-lancamentos').addEventListener('click', showLancamentosView);
+document.getElementById('btn-voltar-dividas-lancamentos').addEventListener('click', showDividasView);
+document.getElementById('btn-novo-lancamento').addEventListener('click', () => openLancamentoModal());
+document.getElementById('btn-cancelar-lancamento').addEventListener('click', closeLancamentoModal);
+document.getElementById('btn-salvar-lancamento').addEventListener('click', salvarLancamento);
+document.getElementById('lancamento-overlay').addEventListener('click', (e) => {
+  if (e.target.id === 'lancamento-overlay') closeLancamentoModal();
+});
+document.getElementById('btn-lanc-tipo-receita').addEventListener('click', () => setTipoLancamentoModal('receita'));
+document.getElementById('btn-lanc-tipo-despesa').addEventListener('click', () => setTipoLancamentoModal('despesa'));
 
 document.getElementById('select-perfil-profissao').addEventListener('change', (e) => {
   const inputOutra = document.getElementById('input-perfil-profissao-outra');
