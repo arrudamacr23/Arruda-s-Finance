@@ -6,6 +6,7 @@
   <title>Arruda's Finance</title>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="style.css">
+<meta name="theme-color" content="#000000">
 </head>
 <body>
 
@@ -17,19 +18,39 @@
 
     <div class="auth-title" id="auth-titulo">Entrar</div>
 
-    <label class="modal-label">Email</label>
-    <input type="email" id="auth-email" class="modal-input" placeholder="seu@email.com" autocomplete="username" />
+    <div id="auth-campo-email-wrap">
+      <label class="modal-label">Email</label>
+      <input type="email" id="auth-email" class="modal-input" placeholder="seu@email.com" autocomplete="username" />
+    </div>
 
-    <label class="modal-label">Senha</label>
-    <input type="password" id="auth-senha" class="modal-input" placeholder="••••••••" autocomplete="current-password" />
+    <div id="auth-campo-senha-wrap">
+      <label class="modal-label">Senha</label>
+      <input type="password" id="auth-senha" class="modal-input" placeholder="••••••••" autocomplete="current-password" />
+    </div>
+
+    <div id="auth-campos-nova-senha" style="display:none;">
+      <label class="modal-label">Nova senha</label>
+      <input type="password" id="auth-nova-senha" class="modal-input" placeholder="••••••••" autocomplete="new-password" />
+
+      <label class="modal-label">Confirmar nova senha</label>
+      <input type="password" id="auth-confirmar-nova-senha" class="modal-input" placeholder="••••••••" autocomplete="new-password" />
+    </div>
 
     <div class="auth-msg" id="auth-msg"></div>
 
     <button class="btn-primary auth-btn-confirmar" id="btn-auth-confirmar">Entrar</button>
 
-    <div class="auth-toggle">
+    <div class="auth-toggle" id="auth-toggle-wrap">
       <span id="auth-toggle-texto">Ainda não tem conta?</span>
       <button class="auth-toggle-btn" id="btn-auth-toggle">Cadastre-se</button>
+    </div>
+
+    <div class="auth-toggle" id="auth-forgot-wrap">
+      <button class="auth-toggle-btn" id="btn-esqueci-senha">Esqueci minha senha</button>
+    </div>
+
+    <div class="auth-toggle" id="auth-voltar-login-wrap" style="display:none;">
+      <button class="auth-toggle-btn" id="btn-voltar-login">← Voltar para o login</button>
     </div>
   </div>
 </div>
@@ -153,6 +174,9 @@
       </div>
 
       <div class="perfil-card perfil-form-card">
+        <label class="modal-label">Nome</label>
+        <input type="text" id="input-perfil-nome" class="modal-input" placeholder="Seu nome" />
+
         <label class="modal-label">Telefone</label>
         <input type="tel" id="input-perfil-telefone" class="modal-input" placeholder="(00) 00000-0000" />
 
@@ -170,6 +194,63 @@
     <div class="progress-section" id="perfil-resumo-section" style="display:none;">
       <div class="section-title">Resumo Financeiro</div>
       <div class="stats-grid" id="perfil-resumo-stats"></div>
+    </div>
+
+    <!-- ===================== CONTA E SEGURANÇA ===================== -->
+    <div class="section-title" style="margin-top:40px;">Conta e Segurança</div>
+
+    <div class="conta-grid">
+
+      <!-- Sobre a conta -->
+      <div class="perfil-card">
+        <div class="conta-card-titulo">👤 Sobre a Conta</div>
+        <div class="detalhe-list" id="conta-info-lista"></div>
+        <div class="conta-card-actions">
+          <button class="btn-secondary" id="btn-sair-conta">Sair</button>
+          <button class="btn-secondary" id="btn-sair-todos-dispositivos">Sair de todos os dispositivos</button>
+        </div>
+      </div>
+
+      <!-- Alterar senha -->
+      <div class="perfil-card">
+        <div class="conta-card-titulo">🔒 Alterar Senha</div>
+        <p class="modal-hint" style="margin-top:0;">Pra sua segurança, confirme sua senha atual antes de definir uma nova.</p>
+
+        <label class="modal-label">Senha atual</label>
+        <input type="password" id="input-senha-atual" class="modal-input" autocomplete="current-password" />
+
+        <label class="modal-label">Nova senha</label>
+        <input type="password" id="input-senha-nova" class="modal-input" autocomplete="new-password" />
+
+        <label class="modal-label">Confirmar nova senha</label>
+        <input type="password" id="input-senha-nova-confirmar" class="modal-input" autocomplete="new-password" />
+
+        <div class="conta-card-actions">
+          <button class="btn-primary" id="btn-alterar-senha">Atualizar Senha</button>
+        </div>
+      </div>
+
+      <!-- Privacidade -->
+      <div class="perfil-card">
+        <div class="conta-card-titulo">📤 Privacidade</div>
+        <p class="modal-hint" style="margin-top:0;">Baixe uma cópia de tudo que você cadastrou no sistema: dívidas, parcelas, metas, lançamentos e perfil, em um arquivo JSON.</p>
+        <div class="conta-card-actions">
+          <button class="btn-secondary" id="btn-exportar-dados">Exportar Meus Dados</button>
+        </div>
+      </div>
+
+      <!-- Zona de perigo -->
+      <div class="perfil-card conta-card-perigo">
+        <div class="conta-card-titulo">⚠️ Excluir Minha Conta</div>
+        <p class="modal-hint" style="margin-top:0;">
+          Essa ação é <strong>permanente e não pode ser desfeita</strong>. Todas as suas dívidas, parcelas,
+          metas, lançamentos e dados de perfil serão apagados definitivamente.
+        </p>
+        <div class="conta-card-actions">
+          <button class="btn-danger" id="btn-abrir-exclusao-conta">Excluir Minha Conta</button>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -434,10 +515,34 @@
   </div>
 </div>
 
+<!-- Modal: confirmar exclusão de conta -->
+<div class="modal-overlay" id="exclusao-conta-overlay">
+  <div class="modal">
+    <div class="modal-title">⚠️ Excluir Minha Conta</div>
+
+    <p class="modal-hint" style="margin-top:0;">
+      Isso vai apagar <strong>permanentemente</strong> todas as suas dívidas, parcelas, metas,
+      lançamentos e dados de perfil. Essa ação <strong>não pode ser desfeita</strong>.
+    </p>
+
+    <label class="modal-label">Digite <strong>EXCLUIR</strong> para confirmar</label>
+    <input type="text" id="input-confirmar-exclusao" class="modal-input" placeholder="EXCLUIR" autocomplete="off" />
+
+    <label class="modal-label">Sua senha</label>
+    <input type="password" id="input-senha-exclusao" class="modal-input" autocomplete="current-password" />
+
+    <div class="modal-actions">
+      <button class="btn-secondary" id="btn-cancelar-exclusao-conta">Cancelar</button>
+      <button class="btn-danger" id="btn-confirmar-exclusao-conta">Excluir Permanentemente</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
 <script src="script.js"></script>
+<script src="fx.js"></script>
 </body>
 </html>

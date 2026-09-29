@@ -83,7 +83,7 @@ function showToast(msg) {
    AUTENTICAÇÃO
    ============================================================ */
 
-let modoAuth = 'login'; // 'login' | 'cadastro'
+let modoAuth = 'login'; // 'login' | 'cadastro' | 'recuperar' | 'nova_senha'
 
 function showAuthScreen() {
   document.getElementById('auth-screen').classList.add('show');
@@ -109,6 +109,14 @@ async function checkSession() {
 }
 
 supabaseClient.auth.onAuthStateChange((event, session) => {
+  if (event === 'PASSWORD_RECOVERY') {
+    // usuário clicou no link de "esqueci minha senha" — não abre o app
+    // direto; pede pra ele definir a nova senha primeiro
+    modoAuth = 'nova_senha';
+    showAuthScreen();
+    atualizarTelaAuth();
+    return;
+  }
   if (event === 'SIGNED_IN' && session) {
     currentUser = session.user;
     showAppScreen();
@@ -167,6 +175,37 @@ async function fazerLogout() {
   await supabaseClient.auth.signOut();
 }
 
+/* solicita o link de recuperação de senha via Supabase Auth — não existe
+   nenhum sistema próprio de recuperação, é o fluxo nativo mesmo */
+async function enviarRecuperacaoSenha() {
+  const email = document.getElementById('auth-email').value.trim();
+  if (!email) { showAuthMsg('Digite seu email pra receber o link de recuperação'); return; }
+
+  const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + window.location.pathname,
+  });
+  if (error) { showAuthMsg(traduzErroAuth(error.message)); return; }
+
+  showAuthMsg('Se esse email tiver uma conta, enviamos um link de recuperação. Confira sua caixa de entrada.', true);
+}
+
+/* chamado depois que o usuário chega pelo link do email (evento
+   PASSWORD_RECOVERY) — define a nova senha usando a sessão temporária
+   de recuperação que o próprio Supabase já validou */
+async function salvarNovaSenhaRecuperacao() {
+  const nova = document.getElementById('auth-nova-senha').value;
+  const confirmar = document.getElementById('auth-confirmar-nova-senha').value;
+
+  if (nova.length < 6) { showAuthMsg('A senha precisa ter no mínimo 6 caracteres'); return; }
+  if (nova !== confirmar) { showAuthMsg('As senhas não coincidem'); return; }
+
+  const { error } = await supabaseClient.auth.updateUser({ password: nova });
+  if (error) { showAuthMsg(traduzErroAuth(error.message)); return; }
+
+  showAuthMsg('Senha atualizada com sucesso! Entrando...', true);
+  setTimeout(() => { showAppScreen(); iniciarApp(); }, 900);
+}
+
 function alternarModoAuth() {
   modoAuth = modoAuth === 'login' ? 'cadastro' : 'login';
   atualizarTelaAuth();
@@ -174,12 +213,56 @@ function alternarModoAuth() {
 
 function atualizarTelaAuth() {
   document.getElementById('auth-msg').textContent = '';
-  document.getElementById('btn-auth-confirmar').textContent = modoAuth === 'login' ? 'Entrar' : 'Criar Conta';
-  document.getElementById('auth-titulo').textContent = modoAuth === 'login' ? 'Entrar' : 'Criar Conta';
-  document.getElementById('auth-toggle-texto').textContent = modoAuth === 'login'
-    ? 'Ainda não tem conta?'
-    : 'Já tem uma conta?';
-  document.getElementById('btn-auth-toggle').textContent = modoAuth === 'login' ? 'Cadastre-se' : 'Entrar';
+
+  const emailWrap = document.getElementById('auth-campo-email-wrap');
+  const senhaWrap = document.getElementById('auth-campo-senha-wrap');
+  const novaSenhaWrap = document.getElementById('auth-campos-nova-senha');
+  const toggleWrap = document.getElementById('auth-toggle-wrap');
+  const forgotWrap = document.getElementById('auth-forgot-wrap');
+  const voltarWrap = document.getElementById('auth-voltar-login-wrap');
+  const titulo = document.getElementById('auth-titulo');
+  const btnConfirmar = document.getElementById('btn-auth-confirmar');
+
+  if (modoAuth === 'recuperar') {
+    titulo.textContent = 'Recuperar Senha';
+    emailWrap.style.display = 'block';
+    senhaWrap.style.display = 'none';
+    novaSenhaWrap.style.display = 'none';
+    toggleWrap.style.display = 'none';
+    forgotWrap.style.display = 'none';
+    voltarWrap.style.display = 'flex';
+    btnConfirmar.textContent = 'Enviar Link de Recuperação';
+  } else if (modoAuth === 'nova_senha') {
+    titulo.textContent = 'Defina sua Nova Senha';
+    emailWrap.style.display = 'none';
+    senhaWrap.style.display = 'none';
+    novaSenhaWrap.style.display = 'block';
+    toggleWrap.style.display = 'none';
+    forgotWrap.style.display = 'none';
+    voltarWrap.style.display = 'none';
+    btnConfirmar.textContent = 'Salvar Nova Senha';
+  } else {
+    emailWrap.style.display = 'block';
+    senhaWrap.style.display = 'block';
+    novaSenhaWrap.style.display = 'none';
+    toggleWrap.style.display = 'flex';
+    forgotWrap.style.display = modoAuth === 'login' ? 'flex' : 'none';
+    voltarWrap.style.display = 'none';
+    btnConfirmar.textContent = modoAuth === 'login' ? 'Entrar' : 'Criar Conta';
+    titulo.textContent = modoAuth === 'login' ? 'Entrar' : 'Criar Conta';
+    document.getElementById('auth-toggle-texto').textContent = modoAuth === 'login'
+      ? 'Ainda não tem conta?'
+      : 'Já tem uma conta?';
+    document.getElementById('btn-auth-toggle').textContent = modoAuth === 'login' ? 'Cadastre-se' : 'Entrar';
+  }
+}
+
+/* botão principal da auth-screen se comporta diferente conforme o modo atual */
+function handleAuthConfirmar() {
+  if (modoAuth === 'login') fazerLogin();
+  else if (modoAuth === 'cadastro') fazerCadastro();
+  else if (modoAuth === 'recuperar') enviarRecuperacaoSenha();
+  else if (modoAuth === 'nova_senha') salvarNovaSenhaRecuperacao();
 }
 
 /* ============================================================
@@ -582,13 +665,18 @@ function atualizarAvatarPreview(src) {
 }
 
 function renderPerfilForm() {
-  document.getElementById('perfil-email-label').textContent = currentUser?.email || '';
+  document.getElementById('perfil-email-label').textContent = perfilAtual?.nome
+    ? `${perfilAtual.nome} · ${currentUser?.email || ''}`
+    : (currentUser?.email || '');
+  document.getElementById('input-perfil-nome').value = perfilAtual?.nome || '';
   document.getElementById('input-perfil-telefone').value = perfilAtual?.telefone || '';
   document.getElementById('input-perfil-salario').value = perfilAtual?.salario ?? '';
   preencherSelectProfissoes(perfilAtual?.profissao || '');
 
   fotoPerfilPendente = undefined;
   atualizarAvatarPreview(perfilAtual?.foto_base64 || null);
+
+  renderContaInfo();
 }
 
 function calcResumoFinanceiro(salario) {
@@ -676,6 +764,7 @@ function renderResumoFinanceiro() {
 }
 
 async function salvarPerfil() {
+  const nome = document.getElementById('input-perfil-nome').value.trim();
   const telefone  = document.getElementById('input-perfil-telefone').value.trim();
   const salarioVal = document.getElementById('input-perfil-salario').value;
   const salario   = salarioVal === '' ? null : parseFloat(salarioVal);
@@ -692,6 +781,7 @@ async function salvarPerfil() {
 
   const payload = {
     user_id: currentUser.id,
+    nome: nome || null,
     telefone: telefone || null,
     profissao: profissao || null,
     salario,
@@ -713,6 +803,158 @@ async function salvarPerfil() {
   fotoPerfilPendente = undefined;
   renderResumoFinanceiro();
   showToast('Perfil salvo com sucesso!');
+}
+
+/* ============================================================
+   CONTA E SEGURANÇA
+   ============================================================ */
+
+/* "Sobre a Conta" — só usa dados que o próprio Supabase Auth já
+   devolve na sessão do usuário (created_at, last_sign_in_at). Não
+   existe API de cliente pra listar sessões ativas em outros
+   dispositivos — isso exigiria a Admin API (service_role), que não
+   pode rodar no navegador — então é sinalizado com transparência. */
+function renderContaInfo() {
+  const lista = document.getElementById('conta-info-lista');
+  if (!lista || !currentUser) return;
+
+  const criadaEm = currentUser.created_at ? new Date(currentUser.created_at).toLocaleDateString('pt-BR') : '—';
+  const ultimoAcesso = currentUser.last_sign_in_at ? new Date(currentUser.last_sign_in_at).toLocaleString('pt-BR') : '—';
+  const emailConfirmado = currentUser.email_confirmed_at ? 'Sim' : 'Não';
+
+  const linhas = [
+    ['Email', currentUser.email || '—'],
+    ['Conta criada em', criadaEm],
+    ['Último acesso', ultimoAcesso],
+    ['Email confirmado', emailConfirmado],
+  ];
+
+  lista.innerHTML = linhas.map(([label, valor]) => `
+    <div class="detalhe-row">
+      <div class="detalhe-label">${label}</div>
+      <div class="detalhe-value">${valor}</div>
+    </div>`).join('') + `
+    <p class="modal-hint" style="margin-top:12px;">Por segurança, o navegador não tem acesso a uma lista de sessões ativas em outros dispositivos — use "Sair de todos os dispositivos" se desconfiar de algum acesso indevido.</p>`;
+}
+
+/* troca de senha exigindo a senha atual — o SDK do Supabase não tem um
+   endpoint de "verificar senha", então a forma correta e suportada é
+   tentar um signInWithPassword com a senha atual antes de trocar */
+async function alterarSenha() {
+  const senhaAtual = document.getElementById('input-senha-atual').value;
+  const novaSenha = document.getElementById('input-senha-nova').value;
+  const confirmar = document.getElementById('input-senha-nova-confirmar').value;
+
+  if (!senhaAtual) { showToast('Digite sua senha atual'); return; }
+  if (novaSenha.length < 6) { showToast('A nova senha precisa ter no mínimo 6 caracteres'); return; }
+  if (novaSenha !== confirmar) { showToast('A confirmação não bate com a nova senha'); return; }
+  if (novaSenha === senhaAtual) { showToast('A nova senha precisa ser diferente da atual'); return; }
+
+  const { error: erroVerificacao } = await supabaseClient.auth.signInWithPassword({
+    email: currentUser.email,
+    password: senhaAtual,
+  });
+  if (erroVerificacao) { showToast('Senha atual incorreta'); return; }
+
+  const { error } = await supabaseClient.auth.updateUser({ password: novaSenha });
+  if (error) { showToast('Erro ao atualizar senha: ' + error.message); return; }
+
+  document.getElementById('input-senha-atual').value = '';
+  document.getElementById('input-senha-nova').value = '';
+  document.getElementById('input-senha-nova-confirmar').value = '';
+  showToast('Senha atualizada com sucesso!');
+}
+
+async function sairDeTodosDispositivos() {
+  const ok = confirm('Isso vai encerrar sua sessão em todos os dispositivos conectados, inclusive este. Continuar?');
+  if (!ok) return;
+  await supabaseClient.auth.signOut({ scope: 'global' });
+}
+
+/* exporta tudo que já está carregado localmente — nenhuma consulta nova
+   precisa ser feita, os dados já vêm do próprio Supabase com RLS aplicada */
+function exportarDados() {
+  const pacote = {
+    exportado_em: new Date().toISOString(),
+    conta: { email: currentUser?.email, criada_em: currentUser?.created_at },
+    perfil: perfilAtual,
+    dividas,
+    metas,
+    lancamentos,
+  };
+
+  const blob = new Blob([JSON.stringify(pacote, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `arrudas-finance-meus-dados-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showToast('Seus dados foram exportados.');
+}
+
+/* ── Exclusão de conta ── */
+function abrirExclusaoConta() {
+  document.getElementById('input-confirmar-exclusao').value = '';
+  document.getElementById('input-senha-exclusao').value = '';
+  document.getElementById('exclusao-conta-overlay').classList.add('show');
+}
+
+function fecharExclusaoConta() {
+  document.getElementById('exclusao-conta-overlay').classList.remove('show');
+}
+
+/* Apaga todos os dados do usuário nas tabelas que o próprio cliente tem
+   permissão de RLS pra deletar. Isso NÃO remove a conta de login em si —
+   deletar de auth.users exige a service_role key, que nunca pode viver
+   no navegador. Por isso, se existir a Edge Function "delete-account"
+   publicada, ela é chamada também; se não existir, os dados já saem
+   completamente apagados e avisamos que a conta de login segue existindo
+   até um administrador rodar a função (ou apagar manualmente). */
+async function confirmarExclusaoConta() {
+  const confirmacao = document.getElementById('input-confirmar-exclusao').value.trim();
+  const senha = document.getElementById('input-senha-exclusao').value;
+
+  if (confirmacao !== 'EXCLUIR') { showToast('Digite EXCLUIR pra confirmar'); return; }
+  if (!senha) { showToast('Digite sua senha pra confirmar'); return; }
+
+  const { error: erroSenha } = await supabaseClient.auth.signInWithPassword({
+    email: currentUser.email,
+    password: senha,
+  });
+  if (erroSenha) { showToast('Senha incorreta'); return; }
+
+  showToast('Excluindo seus dados...');
+
+  for (const d of dividas) {
+    await supabaseClient.from('parcelas').delete().eq('divida_id', d.id);
+  }
+  await supabaseClient.from('dividas').delete().eq('user_id', currentUser.id);
+  await supabaseClient.from('metas').delete().eq('user_id', currentUser.id);
+  await supabaseClient.from('lancamentos').delete().eq('user_id', currentUser.id);
+  await supabaseClient.from('notificacoes_lidas').delete().eq('user_id', currentUser.id);
+  await supabaseClient.from('perfis').delete().eq('user_id', currentUser.id);
+
+  let contaRemovida = false;
+  try {
+    const { error: erroFuncao } = await supabaseClient.functions.invoke('delete-account');
+    contaRemovida = !erroFuncao;
+  } catch (e) {
+    contaRemovida = false;
+  }
+
+  fecharExclusaoConta();
+
+  if (contaRemovida) {
+    showToast('Sua conta e seus dados foram excluídos.');
+  } else {
+    showToast('Seus dados foram apagados. Fale com o administrador do sistema pra remover o login definitivamente.');
+  }
+
+  await supabaseClient.auth.signOut();
 }
 
 /* dispara (ou reinicia) a animação de entrada de uma view */
@@ -3251,14 +3493,19 @@ document.getElementById('edit-divida-overlay').addEventListener('click', (e) => 
   if (e.target.id === 'edit-divida-overlay') closeEditDividaModal();
 });
 
-document.getElementById('btn-auth-confirmar').addEventListener('click', () => {
-  if (modoAuth === 'login') fazerLogin();
-  else fazerCadastro();
-});
+document.getElementById('btn-auth-confirmar').addEventListener('click', handleAuthConfirmar);
 document.getElementById('btn-auth-toggle').addEventListener('click', alternarModoAuth);
 document.getElementById('btn-logout').addEventListener('click', fazerLogout);
+document.getElementById('btn-esqueci-senha').addEventListener('click', () => {
+  modoAuth = 'recuperar';
+  atualizarTelaAuth();
+});
+document.getElementById('btn-voltar-login').addEventListener('click', () => {
+  modoAuth = 'login';
+  atualizarTelaAuth();
+});
 
-['auth-email', 'auth-senha'].forEach(id => {
+['auth-email', 'auth-senha', 'auth-nova-senha', 'auth-confirmar-nova-senha'].forEach(id => {
   document.getElementById(id).addEventListener('keydown', (e) => {
     if (e.key === 'Enter') document.getElementById('btn-auth-confirmar').click();
   });
@@ -3268,6 +3515,18 @@ document.getElementById('btn-logout').addEventListener('click', fazerLogout);
 document.getElementById('btn-perfil').addEventListener('click', showPerfilView);
 document.getElementById('btn-voltar-dividas').addEventListener('click', showDividasView);
 document.getElementById('btn-salvar-perfil').addEventListener('click', salvarPerfil);
+
+/* ── Conta e Segurança ── */
+document.getElementById('btn-sair-conta').addEventListener('click', fazerLogout);
+document.getElementById('btn-sair-todos-dispositivos').addEventListener('click', sairDeTodosDispositivos);
+document.getElementById('btn-alterar-senha').addEventListener('click', alterarSenha);
+document.getElementById('btn-exportar-dados').addEventListener('click', exportarDados);
+document.getElementById('btn-abrir-exclusao-conta').addEventListener('click', abrirExclusaoConta);
+document.getElementById('btn-cancelar-exclusao-conta').addEventListener('click', fecharExclusaoConta);
+document.getElementById('btn-confirmar-exclusao-conta').addEventListener('click', confirmarExclusaoConta);
+document.getElementById('exclusao-conta-overlay').addEventListener('click', (e) => {
+  if (e.target.id === 'exclusao-conta-overlay') fecharExclusaoConta();
+});
 
 /* ── Central de Notificações ── */
 document.getElementById('btn-notificacoes').addEventListener('click', (e) => {
