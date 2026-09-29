@@ -728,7 +728,7 @@ function renderResumoFinanceiro() {
         <div class="stat-sub">equivalente ao seu salário</div>
       </div>`;
 
-    const sobra = salario - parcelasMes;
+    const sobra = calcSobraMes(salario, parcelasMes);
     let selo, seloTexto, seloClasse;
     if (pctComprometido <= 30) { selo = '🟢'; seloTexto = 'Saudável'; seloClasse = 'green'; }
     else if (pctComprometido <= 50) { selo = '🟡'; seloTexto = 'Atenção'; seloClasse = 'gold'; }
@@ -1214,7 +1214,7 @@ function renderVisaoGeral() {
   /* ── Cabeçalho: banner de saúde financeira, ou CTA para cadastrar salário ── */
   let saudeHtml;
   if (temSalario) {
-    const sobra = salario - parcelasMes;
+    const sobra = calcSobraMes(salario, parcelasMes);
     let selo, seloTexto, seloClasse;
     if (pctComprometido <= 30) { selo = '🟢'; seloTexto = 'Saudável'; seloClasse = 'green'; }
     else if (pctComprometido <= 50) { selo = '🟡'; seloTexto = 'Atenção'; seloClasse = 'gold'; }
@@ -3612,6 +3612,213 @@ document.getElementById('input-foto-perfil').addEventListener('change', async (e
   }
   e.target.value = '';
 });
+
+/* ============================================================
+   ONBOARDING + PRIMEIROS PASSOS
+   ============================================================
+   Reaproveita openModal / openLancamentoModal / openMetaModal e o
+   campo `salario` do perfil. Estado guardado em `perfis`:
+   onboarding_concluido e primeiros_passos_oculto (ver SQL).
+   ============================================================ */
+
+/* sobra do mês = salário + receitas extras − parcelas − despesas (fixas incluídas) */
+function calcSobraMes(salario, parcelasMes) {
+  const { mesIdx, ano } = hojeInfo();
+  const f = calcFluxoCaixaMes(ano, mesIdx);
+  return salario + f.receitas - parcelasMes - f.despesas;
+}
+
+const OB = { passo: 1, objetivo: null, temDivida: null, timer: null, base: null };
+const OB_TOTAL = 4;
+const OB_OBJETIVOS = ['Quitar dívidas', 'Organizar receitas e despesas', 'Controlar meu orçamento', 'Acompanhar tudo'];
+
+async function salvarFlagsPerfil(flags) {
+  if (!currentUser) return;
+  const { data, error } = await supabaseClient
+    .from('perfis').upsert({ user_id: currentUser.id, ...flags }, { onConflict: 'user_id' }).select().single();
+  if (error) { showToast('Não foi possível salvar: ' + error.message); return false; }
+  perfilAtual = data;
+  return true;
+}
+
+function deveMostrarOnboarding() {
+  return !perfilAtual?.onboarding_concluido && !dividas.length && !lancamentos.length
+    && !metas.length && !(perfilAtual?.salario > 0);
+}
+
+function obContagens() {
+  return {
+    dividas: dividas.length - OB.base.dividas,
+    despesas: lancamentos.filter(l => l.tipo === 'despesa' && l.recorrente).length - OB.base.despesas,
+  };
+}
+
+function abrirOnboarding() {
+  if (document.getElementById('ob-overlay')) return;
+  Object.assign(OB, { passo: 1, objetivo: null, temDivida: null,
+    base: { dividas: dividas.length, despesas: lancamentos.filter(l => l.tipo === 'despesa' && l.recorrente).length } });
+  const ov = document.createElement('div');
+  ov.id = 'ob-overlay'; ov.className = 'ob-overlay';
+  ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
+  document.body.appendChild(ov);
+  ov.addEventListener('click', obClique);
+  OB.timer = setInterval(obAtualizarContagem, 500);
+  renderOnboarding();
+}
+
+function fecharOnboardingUI() {
+  clearInterval(OB.timer);
+  document.getElementById('ob-overlay')?.remove();
+}
+
+function obTextoContagem(n, singular, plural, vazio) {
+  return n > 0 ? `✓ ${n} ${n === 1 ? singular : plural}` : vazio;
+}
+
+function obAtualizarContagem() {
+  const el = document.getElementById('ob-contagem');
+  if (!el || !OB.base) return;
+  const c = obContagens();
+  el.textContent = OB.passo === 2
+    ? obTextoContagem(c.dividas, 'dívida adicionada', 'dívidas adicionadas', '')
+    : obTextoContagem(c.despesas, 'despesa fixa adicionada', 'despesas fixas adicionadas', '');
+}
+
+function renderOnboarding() {
+  const ov = document.getElementById('ob-overlay');
+  if (!ov) return;
+  const p = OB.passo;
+  let corpo = '', titulo = '', dica = '';
+
+  if (p === 1) {
+    titulo = 'Qual é o seu principal objetivo?';
+    corpo = `<div class="ob-opcoes">${OB_OBJETIVOS.map(o =>
+      `<button class="ob-opcao ${OB.objetivo === o ? 'ativa' : ''}" data-ob="objetivo" data-v="${o}">${o}</button>`).join('')}</div>`;
+  } else if (p === 2) {
+    titulo = 'Você possui dívidas?';
+    corpo = `<div class="ob-opcoes ob-duas">
+        <button class="ob-opcao ${OB.temDivida === true ? 'ativa' : ''}" data-ob="divida" data-v="1">Sim</button>
+        <button class="ob-opcao ${OB.temDivida === false ? 'ativa' : ''}" data-ob="divida" data-v="0">Não</button></div>
+      ${OB.temDivida ? `<button class="btn-primary ob-acao" data-ob="nova-divida">+ Cadastrar minha dívida</button>` : ''}
+      <div class="ob-contagem" id="ob-contagem"></div>`;
+  } else if (p === 3) {
+    titulo = 'Qual é a sua renda mensal?';
+    dica = 'Usamos para mostrar quanto sobra depois das parcelas e das despesas. Você pode pular.';
+    corpo = `<label class="modal-label" for="ob-salario">Salário ou renda fixa (R$)</label>
+      <input type="number" id="ob-salario" class="modal-input" inputmode="decimal" min="0" step="0.01"
+        placeholder="Ex: 3000" value="${perfilAtual?.salario ?? ''}" />`;
+  } else if (p === 4) {
+    titulo = 'Quais são suas despesas fixas?';
+    dica = 'Contas que se repetem todo mês, como internet e plano de saúde. Ficam separadas das dívidas: dívida acaba, despesa fixa continua.';
+    corpo = `<button class="btn-primary ob-acao" data-ob="nova-despesa">+ Adicionar despesa fixa</button>
+      <div class="ob-contagem" id="ob-contagem"></div>`;
+  } else {
+    const c = obContagens(), renda = perfilAtual?.salario > 0;
+    const linha = (ok, sim, nao) => `<li class="${ok ? 'ok' : ''}">${ok ? '✓' : '○'} ${ok ? sim : nao}</li>`;
+    titulo = '🎉 Tudo pronto!';
+    dica = 'Seu painel financeiro está preparado.';
+    corpo = `<ul class="ob-resumo">
+        ${linha(c.dividas > 0, obTextoContagem(c.dividas, 'dívida adicionada', 'dívidas adicionadas', '').slice(2), 'Nenhuma dívida adicionada')}
+        ${linha(renda, 'Renda mensal informada', 'Renda mensal não informada')}
+        ${linha(c.despesas > 0, obTextoContagem(c.despesas, 'despesa fixa adicionada', 'despesas fixas adicionadas', '').slice(2), 'Nenhuma despesa fixa adicionada')}
+      </ul>`;
+  }
+
+  const final = p > OB_TOTAL;
+  ov.innerHTML = `<div class="ob-card">
+    ${final ? '' : `<div class="ob-topo"><span class="ob-passo">Passo ${p} de ${OB_TOTAL}</span>
+      <button class="ob-pular" data-ob="pular">Pular por enquanto</button></div>
+      <div class="ob-barra"><div class="ob-barra-fill" style="width:${(p / OB_TOTAL) * 100}%"></div></div>`}
+    ${p === 1 ? `<div class="ob-boas-vindas">👋 Bem-vindo ao Arruda's Finance!<br><small>Vamos configurar sua vida financeira em poucos passos.</small></div>` : ''}
+    <h2 class="ob-titulo">${titulo}</h2>
+    ${dica ? `<p class="ob-dica">${dica}</p>` : ''}
+    <div class="ob-corpo">${corpo}</div>
+    <div class="ob-rodape">
+      ${final ? `<button class="btn-primary" data-ob="concluir">Começar a usar o Arruda's Finance</button>` : `
+        <button class="btn-secondary" data-ob="voltar" ${p === 1 ? 'style="visibility:hidden"' : ''}>Voltar</button>
+        <button class="btn-primary" data-ob="avancar">${p === OB_TOTAL ? 'Finalizar' : 'Continuar'}</button>`}
+    </div></div>`;
+  obAtualizarContagem();
+}
+
+async function obClique(e) {
+  const b = e.target.closest('[data-ob]');
+  if (!b) return;
+  const acao = b.dataset.ob;
+  if (acao === 'objetivo') { OB.objetivo = b.dataset.v; renderOnboarding(); }
+  else if (acao === 'divida') { OB.temDivida = b.dataset.v === '1'; renderOnboarding(); }
+  else if (acao === 'nova-divida') openModal();
+  else if (acao === 'nova-despesa') {
+    openLancamentoModal();
+    setTipoLancamentoModal('despesa');
+    document.getElementById('input-lanc-recorrente').checked = true;
+  }
+  else if (acao === 'voltar') { OB.passo--; renderOnboarding(); }
+  else if (acao === 'avancar') {
+    if (OB.passo === 3) {
+      const v = document.getElementById('ob-salario').value;
+      const n = v === '' ? null : parseFloat(v);
+      if (n !== null && (isNaN(n) || n < 0)) { showToast('Digite um valor válido'); return; }
+      if (n !== null && n !== perfilAtual?.salario && !(await salvarFlagsPerfil({ salario: n }))) return;
+    }
+    OB.passo++; renderOnboarding();
+  }
+  else if (acao === 'pular') {
+    await salvarFlagsPerfil({ onboarding_concluido: true });
+    fecharOnboardingUI();
+    refreshViewAtual();
+  }
+  else if (acao === 'concluir') {
+    await salvarFlagsPerfil({ onboarding_concluido: true });
+    fecharOnboardingUI();
+    showGeralView();
+  }
+}
+
+/* ── Checklist "Primeiros passos" (estado real do sistema) ── */
+function primeirosPassosHtml() {
+  if (!perfilAtual?.onboarding_concluido || perfilAtual.primeiros_passos_oculto) return '';
+  const itens = [
+    { ok: dividas.length > 0, txt: 'Criar primeira dívida', acao: 'divida' },
+    { ok: perfilAtual.salario > 0 || lancamentos.some(l => l.tipo === 'receita'), txt: 'Informar sua renda mensal', acao: 'renda' },
+    { ok: metas.length > 0, txt: 'Criar primeira meta', acao: 'meta' },
+  ];
+  const feitos = itens.filter(i => i.ok).length;
+  const tudo = feitos === itens.length;
+  return `<div class="pp-card" id="primeiros-passos">
+    <div class="pp-topo"><div class="pp-titulo">🚀 Primeiros passos</div>
+      <button class="pp-fechar" data-pp="fechar" aria-label="Fechar primeiros passos" title="Fechar">✕</button></div>
+    <div class="pp-sub">${tudo ? '🎉 Você completou todos os primeiros passos!' : `${feitos} de ${itens.length} concluídos`}</div>
+    <div class="pp-barra"><div class="pp-barra-fill" style="width:${(feitos / itens.length) * 100}%"></div></div>
+    <div class="pp-lista">${itens.map(i =>
+      `<button class="pp-item ${i.ok ? 'ok' : ''}" data-pp="${i.acao}" ${i.ok ? 'disabled' : ''}>
+        <span class="pp-check">${i.ok ? '✓' : ''}</span>${i.txt}</button>`).join('')}</div></div>`;
+}
+
+const _renderVisaoGeralBase = renderVisaoGeral;
+renderVisaoGeral = function () {
+  _renderVisaoGeralBase();
+  const html = primeirosPassosHtml();
+  if (html) document.getElementById('geral-content').insertAdjacentHTML('afterbegin', html);
+};
+
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-pp]');
+  if (!b) return;
+  const a = b.dataset.pp;
+  if (a === 'fechar') { if (await salvarFlagsPerfil({ primeiros_passos_oculto: true })) document.getElementById('primeiros-passos')?.remove(); }
+  else if (a === 'divida') { showDividasView(); openModal(); }
+  else if (a === 'renda') showPerfilView();
+  else if (a === 'meta') { showMetasView(); openMetaModal(); }
+});
+
+const _iniciarAppBase = iniciarApp;
+iniciarApp = async function () {
+  await _iniciarAppBase();
+  if (deveMostrarOnboarding()) abrirOnboarding();
+};
+
+supabaseClient.auth.onAuthStateChange((evento) => { if (evento === 'SIGNED_OUT') fecharOnboardingUI(); });
 
 /* ── Início ── */
 checkSession();
