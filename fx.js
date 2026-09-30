@@ -20,7 +20,7 @@
     ultimo.set(chave, alvo);
     if (de === alvo) { el.dataset.fxFinal = txt; return; }
     const fmt = v => pre + v.toLocaleString('pt-BR', { minimumFractionDigits: dec, maximumFractionDigits: dec }) + suf;
-    const dur = 800, t0 = performance.now();
+    const dur = 600, t0 = performance.now();
     el.dataset.fxAnim = '1';
     (function passo(t) {
       const k = Math.min((t - t0) / dur, 1), e = 1 - Math.pow(1 - k, 3);

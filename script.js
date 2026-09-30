@@ -3820,5 +3820,101 @@ iniciarApp = async function () {
 
 supabaseClient.auth.onAuthStateChange((evento) => { if (evento === 'SIGNED_OUT') fecharOnboardingUI(); });
 
+/* ============================================================
+   REFINO VISUAL — painel, navegação mobile e carregamento
+   (só apresentação: nenhum cálculo ou dado é alterado)
+   ============================================================ */
+function escHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+const G_ORDEM = { pp: 0, 'fluxo-h': 1, 'fluxo-g': 2, saude: 3, atencao: 4, proximos: 5, previsao: 6, distrib: 7,
+  quitacao: 8, criticas: 9, metas: 10, quitadas: 11, 'resumo-t': 12, 'resumo-g': 13, 'ind-t': 14, 'ind-g': 15, ind: 16 };
+const G_METADE = new Set(['atencao', 'proximos', 'previsao', 'distrib', 'criticas', 'metas']);
+
+function blocosAtencaoEMetas() {
+  const alertas = gerarNotificacoes().slice(0, 3);
+  const atencao = `<section class="at-card" data-bloco="atencao"><div class="section-title">Atenção agora</div>${
+    alertas.length ? alertas.map(n => `<div class="at-item"><span>${n.icone}</span><div><b>${n.titulo}</b><small>${n.subtitulo}</small></div></div>`).join('')
+      : '<div class="at-vazio">Nenhum alerta no momento.</div>'}</section>`;
+  const abertas = metas.map(m => ({ m, p: calcMetaProgresso(m) })).filter(x => x.p.pct < 100).sort((a, b) => b.p.pct - a.p.pct).slice(0, 3);
+  const metasHtml = `<section class="at-card" data-bloco="metas"><div class="section-title">Metas</div>${
+    abertas.length ? abertas.map(x => `<div class="at-meta"><div class="at-meta-topo"><b>${escHtml(x.m.nome)}</b><span>${x.p.pct}%</span></div>
+      <div class="progress-bar-wrap" style="height:8px;margin:0;"><div class="progress-bar-fill" style="width:${x.p.pct}%"></div></div></div>`).join('')
+      : '<div class="at-vazio">Nenhuma meta em andamento.</div>'}</section>`;
+  return atencao + metasHtml;
+}
+
+function organizarVisaoGeral() {
+  const c = document.getElementById('geral-content');
+  if (!c.querySelector('.geral-section-header')) { c.classList.remove('geral-layout'); return; }
+  c.insertAdjacentHTML('beforeend', blocosAtencaoEMetas());
+  let anterior = null, viuSaude = false;
+  [...c.children].forEach(el => {
+    const t = el.classList.contains('section-title') ? el.textContent
+      : (el.querySelector(':scope > .section-title, :scope > .geral-section-header .section-title')?.textContent || '');
+    let k = null;
+    if (el.id === 'primeiros-passos') k = 'pp';
+    else if (el.dataset.bloco) k = el.dataset.bloco;
+    else if (el.classList.contains('geral-section-header') && t.includes('Fluxo')) k = 'fluxo-h';
+    else if (anterior === 'fluxo-h') k = 'fluxo-g';
+    else if (t.includes('Progresso Geral')) k = 'quitacao';
+    else if (t.includes('Resumo Financeiro')) k = 'resumo-t';
+    else if (anterior === 'resumo-t') k = 'resumo-g';
+    else if (t.trim() === 'Indicadores') k = 'ind-t';
+    else if (anterior === 'ind-t') k = 'ind-g';
+    else if (el.classList.contains('indicadores-grid')) k = 'ind';
+    else if (t.includes('Próximos Pagamentos')) k = 'proximos';
+    else if (t.includes('Mais Críticas')) k = 'criticas';
+    else if (el.classList.contains('quitadas-resumo')) k = 'quitadas';
+    else if (t.includes('Distribuição')) k = 'distrib';
+    else if (t.includes('Previsão dos')) k = 'previsao';
+    else if (!viuSaude) { k = 'saude'; viuSaude = true; }
+    anterior = k;
+    el.dataset.bloco = k || '';
+    el.style.order = G_ORDEM[k] ?? 99;
+    el.classList.toggle('g-half', G_METADE.has(k));
+  });
+  c.classList.add('geral-layout');
+}
+
+const _renderVisaoGeralComPP = renderVisaoGeral;
+renderVisaoGeral = function () { _renderVisaoGeralComPP(); organizarVisaoGeral(); };
+
+/* esqueleto enquanto os dados carregam */
+const _iniciarAppComOB = iniciarApp;
+iniciarApp = async function () {
+  const alvo = document.getElementById('app-content');
+  if (alvo) alvo.innerHTML = '<div class="sk sk-h"></div><div class="sk-grid"><div class="sk"></div><div class="sk"></div><div class="sk"></div><div class="sk"></div></div>';
+  await _iniciarAppComOB();
+};
+
+/* barra de navegação do celular — aciona os botões que já existem */
+(function () {
+  const nav = document.getElementById('bnav'), mais = document.getElementById('bnav-mais');
+  if (!nav || !mais) return;
+  const views = { geral: 'view-geral', dividas: 'view-dividas', lancamentos: 'view-lancamentos', metas: 'view-metas' };
+  nav.addEventListener('click', e => {
+    const b = e.target.closest('[data-nav]'); if (!b) return;
+    const a = b.dataset.nav;
+    if (a === 'mais') { mais.classList.toggle('show'); return; }
+    mais.classList.remove('show');
+    if (a === 'dividas') showDividasView(); else document.getElementById('btn-' + a)?.click();
+  });
+  mais.addEventListener('click', e => {
+    const b = e.target.closest('[data-nav]'); if (!b) return;
+    mais.classList.remove('show');
+    document.getElementById('btn-' + b.dataset.nav)?.click();
+  });
+  const _mostrarViewBase = mostrarView;
+  mostrarView = function (id) {
+    _mostrarViewBase(id);
+    nav.querySelectorAll('[data-nav]').forEach(b => {
+      const v = views[b.dataset.nav];
+      b.classList.toggle('ativo', v ? v === id : (b.dataset.nav === 'mais' && ['view-historico', 'view-perfil'].includes(id)));
+    });
+  };
+})();
+
 /* ── Início ── */
 checkSession();
