@@ -405,8 +405,6 @@ html, body { overflow-x: hidden; }
 #geral-content.geral-layout { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; grid-auto-flow: row dense; }
 #geral-content.geral-layout > * { grid-column: 1 / -1; margin: 0 !important; min-width: 0; }
 #geral-content.geral-layout > .g-half { grid-column: span 1; }
-[data-bloco="fluxo-g"] { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
-[data-bloco="fluxo-g"] .stat-card:last-child .stat-value { font-size: 2rem; }
 .at-card { padding: 22px; border-radius: 16px; border: 1px solid var(--border); background: linear-gradient(160deg, #0b1328, #050912); }
 .at-card .section-title { margin-bottom: 14px; }
 .at-item { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; border-top: 1px solid var(--border); font-size: .8rem; }
@@ -449,9 +447,6 @@ html, body { overflow-x: hidden; }
   .bnav-mais button { min-height: 46px; text-align: left; padding: 0 12px; border: none; border-radius: 10px; background: none; color: var(--text); font: 500 .85rem 'DM Mono', monospace; }
   .bnav-mais button:active { background: rgba(47,107,255,.16); }
   .toast { bottom: calc(80px + env(safe-area-inset-bottom)); max-width: calc(100vw - 32px); text-align: center; }
-  [data-bloco="fluxo-g"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-  [data-bloco="fluxo-g"] .stat-card:last-child { order: -1; grid-column: 1 / -1; }
-  [data-bloco="fluxo-g"] .stat-card:nth-child(3) { grid-column: 1 / -1; }
   input, select, textarea, .modal-input { font-size: 16px !important; }
   .btn-primary, .btn-secondary, .btn-back { min-height: 44px; }
   .stat-label, .stat-sub, .historico-sub, .modal-hint, .modal-label, .notif-item-sub { font-size: .75rem; }
@@ -459,4 +454,73 @@ html, body { overflow-x: hidden; }
   .modal-overlay .modal { max-width: none; width: 100%; max-height: 92vh; overflow-y: auto; border-radius: 20px 20px 0 0;
     padding: 24px 20px calc(24px + env(safe-area-inset-bottom)); animation: sheetIn .3s cubic-bezier(.16,1,.3,1) both; }
   @keyframes sheetIn { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+}
+
+
+/* ============================================================
+   FINANCIAL COMMAND CENTER — hierarquia da Visão Geral
+   ============================================================ */
+.cc-layout { display: flex; flex-direction: column; gap: 40px; }
+.cc-secao { min-width: 0; }
+.cc-cab { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; padding-bottom: 10px; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+.cc-cab h2 { font: 800 1.1rem 'Syne', sans-serif; letter-spacing: -.2px; }
+.cc-cab p { font-size: .75rem; color: #7d8bb0; }
+.cc-corpo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.cc-corpo > * { grid-column: 1 / -1; margin: 0 !important; min-width: 0; }
+.cc-corpo > .g-half { grid-column: span 1; }
+.cc-corpo > .section-title { margin: 6px 0 -4px !important; font-size: .72rem; }
+[data-bloco="fluxo-g"] { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+
+/* Visão atual: o saldo é o número principal da tela */
+.cc-saldo .stat-card { height: 100%; padding: 26px; }
+.cc-saldo .stat-value { font-size: 2.6rem; line-height: 1.1; }
+
+/* cor com significado financeiro */
+#geral-content .stat-card.green .stat-value { color: var(--positive); }
+#geral-content .stat-card.pink .stat-value { color: var(--accent3); }
+#geral-content .stat-card.gold .stat-value { color: #f0a060; }
+.saude-hero-stat-val[style*="var(--accent)"] { color: var(--positive) !important; }
+.cc-cmp-leg .pos, .cc-evol-saldo.pos { color: var(--positive); }
+.cc-cmp-leg .neg, .cc-evol-saldo.neg { color: var(--accent3); }
+
+.cc-painel { padding: 20px; border-radius: 16px; border: 1px solid var(--border); background: linear-gradient(160deg, #0b1328, #050912); }
+.cc-painel-titulo { margin-bottom: 14px; font: 700 .85rem 'Syne', sans-serif; }
+.cc-cmp-barra { display: flex; height: 14px; border-radius: 100px; overflow: hidden; background: #0f1a33; }
+.cc-cmp-barra i { display: block; height: 100%; }
+.cc-cmp-barra .ent, .cc-evol .ent { background: var(--positive); }
+.cc-cmp-barra .sai, .cc-evol .sai { background: var(--accent3); }
+.cc-cmp-leg { display: flex; justify-content: space-between; gap: 12px; margin-top: 10px; font-size: .75rem; }
+.cc-cmp-nota { margin-top: 6px; font-size: .72rem; color: #7d8bb0; }
+.cc-evol { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.cc-evol-col { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+.cc-evol-barras { display: flex; align-items: flex-end; justify-content: center; gap: 3px; width: 100%; height: 90px; }
+.cc-evol-barras .b { display: block; width: 40%; max-width: 16px; min-height: 2px; border-radius: 3px 3px 0 0; transform-origin: bottom; }
+.cc-evol-mes { font-size: .72rem; color: #7d8bb0; }
+.cc-evol-saldo { font-size: .7rem; }
+.view-fade-in .cc-cmp-barra i { animation: growX .7s cubic-bezier(.16,1,.3,1) both; transform-origin: left; }
+.view-fade-in .cc-evol-barras .b { animation: growY .7s cubic-bezier(.16,1,.3,1) both; }
+@keyframes growY { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+
+/* alertas e metas com estado visível */
+.at-item { border-left: 3px solid transparent; padding-left: 12px; }
+.at-item.red { border-left-color: var(--accent3); }
+.at-item.gold, .at-item.yellow { border-left-color: #f0a060; }
+.at-item.blue { border-left-color: var(--accent2); }
+.at-item.green { border-left-color: var(--positive); }
+.at-meta.pink .progress-bar-fill { background: var(--accent3); }
+.at-meta.gold .progress-bar-fill { background: #f0a060; }
+.at-meta.green .progress-bar-fill { background: var(--positive); }
+.at-meta-sub { display: flex; justify-content: space-between; gap: 10px; margin-top: 6px; font-size: .72rem; color: #7d8bb0; }
+
+@media (max-width: 900px) {
+  .cc-corpo { grid-template-columns: 1fr; }
+  .cc-corpo > .g-half { grid-column: 1 / -1; }
+}
+@media (max-width: 720px) {
+  .cc-layout { gap: 32px; }
+  .cc-saldo .stat-value { font-size: 2.1rem; }
+  [data-bloco="fluxo-g"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  [data-bloco="fluxo-g"] .stat-card:last-child { grid-column: 1 / -1; }
+  .cc-evol-barras { height: 72px; }
+  .cc-cmp-leg, .cc-cmp-nota, .at-meta-sub { font-size: .75rem; }
 }

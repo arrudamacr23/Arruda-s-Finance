@@ -3828,27 +3828,53 @@ function escHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-const G_ORDEM = { pp: 0, 'fluxo-h': 1, 'fluxo-g': 2, saude: 3, atencao: 4, proximos: 5, previsao: 6, distrib: 7,
-  quitacao: 8, criticas: 9, metas: 10, quitadas: 11, 'resumo-t': 12, 'resumo-g': 13, 'ind-t': 14, 'ind-g': 15, ind: 16 };
-const G_METADE = new Set(['atencao', 'proximos', 'previsao', 'distrib', 'criticas', 'metas']);
+const G_METADE = new Set(['saldo', 'saude', 'cmp', 'evol', 'proximos', 'criticas', 'distrib', 'previsao']);
+const brl = v => 'R$ ' + v.toLocaleString('pt-BR');
 
-function blocosAtencaoEMetas() {
+/* blocos novos, só de leitura — usam as mesmas funções de cálculo do resto do app */
+function blocosCommandCenter() {
+  const { mesIdx, ano } = hojeInfo();
+  const f = calcFluxoCaixaMes(ano, mesIdx);
+  const saidas = f.despesas + f.dividasPagas, total = f.receitas + saidas;
+  const cmp = `<div class="cc-painel" data-bloco="cmp"><div class="cc-painel-titulo">Entradas × saídas do mês</div>${
+    total > 0 ? `<div class="cc-cmp-barra"><i class="ent" style="width:${(f.receitas / total) * 100}%"></i><i class="sai" style="width:${(saidas / total) * 100}%"></i></div>
+      <div class="cc-cmp-leg"><span class="pos">Entradas ${brl(f.receitas)}</span><span class="neg">Saídas ${brl(saidas)}</span></div>
+      <div class="cc-cmp-nota">Saídas = despesas + parcelas pagas</div>` : '<div class="at-vazio">Sem movimentações neste mês.</div>'}</div>`;
+
+  const ev = calcEvolucaoSaldo(6);
+  const maxV = Math.max(1, ...ev.map(m => Math.max(m.receitas, m.despesas + m.dividasPagas)));
+  const temEv = ev.some(m => m.receitas || m.despesas || m.dividasPagas);
+  const evol = `<div class="cc-painel" data-bloco="evol"><div class="cc-painel-titulo">Evolução dos últimos 6 meses</div>${
+    temEv ? `<div class="cc-evol">${ev.map(m => `<div class="cc-evol-col" title="${MESES[m.mesIdx]}/${m.ano}: saldo ${brl(m.saldo)}">
+        <div class="cc-evol-barras"><i class="b ent" style="height:${(m.receitas / maxV) * 100}%"></i><i class="b sai" style="height:${((m.despesas + m.dividasPagas) / maxV) * 100}%"></i></div>
+        <span class="cc-evol-mes">${MESES[m.mesIdx].slice(0, 3)}</span>
+        <span class="cc-evol-saldo ${m.saldo >= 0 ? 'pos' : 'neg'}">${m.saldo >= 0 ? '+' : '−'}${Math.abs(m.saldo).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</span></div>`).join('')}</div>
+      <div class="cc-cmp-leg"><span class="pos">Entradas</span><span class="neg">Saídas</span></div>` : '<div class="at-vazio">Ainda sem histórico de movimentações.</div>'}</div>`;
+
   const alertas = gerarNotificacoes().slice(0, 3);
-  const atencao = `<section class="at-card" data-bloco="atencao"><div class="section-title">Atenção agora</div>${
-    alertas.length ? alertas.map(n => `<div class="at-item"><span>${n.icone}</span><div><b>${n.titulo}</b><small>${n.subtitulo}</small></div></div>`).join('')
-      : '<div class="at-vazio">Nenhum alerta no momento.</div>'}</section>`;
-  const abertas = metas.map(m => ({ m, p: calcMetaProgresso(m) })).filter(x => x.p.pct < 100).sort((a, b) => b.p.pct - a.p.pct).slice(0, 3);
-  const metasHtml = `<section class="at-card" data-bloco="metas"><div class="section-title">Metas</div>${
-    abertas.length ? abertas.map(x => `<div class="at-meta"><div class="at-meta-topo"><b>${escHtml(x.m.nome)}</b><span>${x.p.pct}%</span></div>
-      <div class="progress-bar-wrap" style="height:8px;margin:0;"><div class="progress-bar-fill" style="width:${x.p.pct}%"></div></div></div>`).join('')
-      : '<div class="at-vazio">Nenhuma meta em andamento.</div>'}</section>`;
-  return atencao + metasHtml;
+  const atencao = `<div class="at-card" data-bloco="atencao">${alertas.length
+    ? alertas.map(n => `<div class="at-item ${n.cor}"><span>${n.icone}</span><div><b>${n.titulo}</b><small>${n.subtitulo}</small></div></div>`).join('')
+    : '<div class="at-vazio">Nenhum alerta no momento. Tudo em dia. ✓</div>'}</div>`;
+
+  const abertas = metas.map(m => { const p = calcMetaProgresso(m); return { m, p, s: calcMetaStatus(m, p) }; })
+    .filter(x => x.p.pct < 100).sort((a, b) => b.p.pct - a.p.pct).slice(0, 4);
+  const metasHtml = `<div class="at-card" data-bloco="metas">${abertas.length ? abertas.map(x => `
+    <div class="at-meta ${x.s.cor}"><div class="at-meta-topo"><b>${escHtml(x.m.nome)}</b><span>${x.p.pct}%</span></div>
+      <div class="progress-bar-wrap" style="height:8px;margin:0;"><div class="progress-bar-fill" style="width:${x.p.pct}%"></div></div>
+      <div class="at-meta-sub"><span>${brl(x.p.atual)} de ${brl(x.p.objetivo)}</span><span>${x.s.icone} ${x.s.label}</span></div></div>`).join('')
+    : '<div class="at-vazio">Nenhuma meta em andamento. Crie uma em Metas.</div>'}</div>`;
+  return cmp + evol + atencao + metasHtml;
 }
 
+/* reagrupa os blocos que o renderVisaoGeral já montou em seções com hierarquia clara.
+   Os elementos são movidos (não recriados), então IDs e listeners continuam valendo. */
 function organizarVisaoGeral() {
   const c = document.getElementById('geral-content');
-  if (!c.querySelector('.geral-section-header')) { c.classList.remove('geral-layout'); return; }
-  c.insertAdjacentHTML('beforeend', blocosAtencaoEMetas());
+  c.classList.remove('cc-layout');
+  if (!c.querySelector('.geral-section-header')) return;
+  c.insertAdjacentHTML('beforeend', blocosCommandCenter());
+
+  const mapa = {}, sobras = [];
   let anterior = null, viuSaude = false;
   [...c.children].forEach(el => {
     const t = el.classList.contains('section-title') ? el.textContent
@@ -3872,10 +3898,42 @@ function organizarVisaoGeral() {
     else if (!viuSaude) { k = 'saude'; viuSaude = true; }
     anterior = k;
     el.dataset.bloco = k || '';
-    el.style.order = G_ORDEM[k] ?? 99;
     el.classList.toggle('g-half', G_METADE.has(k));
+    if (k) mapa[k] = el; else sobras.push(el);
   });
-  c.classList.add('geral-layout');
+
+  /* o Saldo do Mês sobe do bloco de fluxo para a Visão atual */
+  const saldoCard = mapa['fluxo-g'] && [...mapa['fluxo-g'].children].find(x => x.querySelector('.stat-label')?.textContent.includes('Saldo do Mês'));
+  if (saldoCard) {
+    const w = document.createElement('div');
+    w.className = 'cc-saldo g-half'; w.dataset.bloco = 'saldo';
+    w.appendChild(saldoCard); mapa.saldo = w;
+  }
+
+  const prog = metas.map(calcMetaProgresso);
+  const acumulado = prog.reduce((s, p) => s + p.atual, 0), concluidas = prog.filter(p => p.pct >= 100).length;
+  const secoes = [
+    ['visao', 'Visão atual', 'Como você está neste momento', ['saldo', 'saude']],
+    ['fluxo', 'Entradas e saídas', 'Quanto entrou, quanto saiu e como isso evoluiu', ['fluxo-h', 'fluxo-g', 'cmp', 'evol']],
+    ['compromissos', 'Compromissos', 'Dívidas, parcelas e vencimentos', ['resumo-t', 'resumo-g', 'quitacao', 'proximos', 'criticas', 'distrib', 'previsao']],
+    ['alertas', 'Alertas', 'O que precisa da sua atenção agora', ['atencao']],
+    ['metas', 'Metas', metas.length ? `${concluidas} de ${metas.length} concluídas · ${brl(acumulado)} acumulados` : 'Seus objetivos financeiros', ['metas']],
+    ['historico', 'Indicadores e histórico', 'Visão geral da sua evolução', ['ind-t', 'ind-g', 'ind', 'quitadas']],
+  ];
+  const frag = document.createDocumentFragment();
+  if (mapa.pp) frag.appendChild(mapa.pp);
+  secoes.forEach(([id, titulo, sub, chaves]) => {
+    const itens = chaves.map(k => mapa[k]).filter(Boolean);
+    if (id === 'historico') itens.push(...sobras);
+    if (!itens.length) return;
+    const sec = document.createElement('section');
+    sec.className = 'cc-secao';
+    sec.innerHTML = `<header class="cc-cab"><h2>${titulo}</h2><p>${sub}</p></header><div class="cc-corpo"></div>`;
+    itens.forEach(i => sec.querySelector('.cc-corpo').appendChild(i));
+    frag.appendChild(sec);
+  });
+  c.replaceChildren(frag);
+  c.classList.add('cc-layout');
 }
 
 const _renderVisaoGeralComPP = renderVisaoGeral;
