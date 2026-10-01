@@ -33,5 +33,12 @@
   const varrer = () => document.querySelectorAll('.stat-value').forEach(el => {
     if (el.dataset.fxAnim !== '1' && el.textContent.trim() !== el.dataset.fxFinal) animar(el);
   });
-  new MutationObserver(varrer).observe(document.body, { childList: true, subtree: true, characterData: true });
+  /* agrupa mudanças por quadro e ignora as que a própria animação causa */
+  let agendado = false;
+  new MutationObserver(muts => {
+    const propria = muts.every(m => ((m.target.nodeType === 3 ? m.target.parentElement : m.target))?.closest?.('.stat-value[data-fx-anim="1"]'));
+    if (agendado || propria) return;
+    agendado = true;
+    requestAnimationFrame(() => { agendado = false; varrer(); });
+  }).observe(document.body, { childList: true, subtree: true, characterData: true });
 })();

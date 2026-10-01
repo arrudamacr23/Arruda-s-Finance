@@ -3974,5 +3974,59 @@ iniciarApp = async function () {
   };
 })();
 
+/* ============================================================
+   MICROINTERAÇÕES — feedback de estado (nenhuma lógica financeira)
+   ============================================================ */
+const BTN_SALVAR = '#btn-criar-divida,#btn-salvar-edit-parcela,#btn-salvar-add-parcela,#btn-salvar-edit-divida,#btn-salvar-perfil,#btn-salvar-meta,#btn-salvar-lancamento';
+function limparOcupado() {
+  document.querySelectorAll('.is-loading').forEach(b => { b.classList.remove('is-loading'); b.removeAttribute('aria-busy'); });
+}
+/* botão de salvar mostra "salvando" até o app responder (toast) ou por no máximo 3s */
+document.addEventListener('click', e => {
+  const b = e.target.closest(BTN_SALVAR);
+  if (!b || b.classList.contains('is-loading')) return;
+  b.classList.add('is-loading'); b.setAttribute('aria-busy', 'true');
+  setTimeout(limparOcupado, 3000);
+}, true);
+
+/* toast: erro × sucesso, leitura por leitor de tela e tempo maior para erros */
+document.getElementById('toast')?.setAttribute('role', 'status');
+const _showToastBase = showToast;
+showToast = function (msg) {
+  _showToastBase(msg);
+  limparOcupado();
+  const t = document.getElementById('toast');
+  const erro = /^(erro|não foi possível|inválid|digite|preencha|informe|selecione|escolha)/i.test(String(msg).trim());
+  t.classList.toggle('erro', erro);
+  t.setAttribute('role', erro ? 'alert' : 'status');
+  if (erro) { clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 4800); }
+};
+
+/* meta atingida: destaque único no cartão + aviso (a 1ª renderização só registra o ponto de partida) */
+const _pctMetas = new Map();
+const _renderMetasBase = renderMetas;
+renderMetas = function () {
+  _renderMetasBase();
+  metas.forEach(m => {
+    const pct = calcMetaProgresso(m).pct, antes = _pctMetas.get(m.id);
+    if (antes !== undefined && antes < 100 && pct >= 100) {
+      document.querySelector(`.meta-card[data-id="${m.id}"]`)?.classList.add('meta-conquistada');
+      showToast('🎯 Meta atingida: ' + m.nome);
+    }
+    _pctMetas.set(m.id, pct);
+  });
+};
+
+/* Esc fecha o modal do topo (mesmo caminho do clique no fundo) e o painel de notificações; menu "Mais" fecha ao tocar fora */
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const abertos = document.querySelectorAll('.modal-overlay.show');
+  abertos[abertos.length - 1]?.click();
+  if (painelNotificacoesAberto) fecharPainelNotificacoes();
+});
+document.addEventListener('click', e => {
+  if (!e.target.closest('#bnav, #bnav-mais')) document.getElementById('bnav-mais')?.classList.remove('show');
+});
+
 /* ── Início ── */
 checkSession();
