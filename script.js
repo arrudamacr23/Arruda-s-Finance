@@ -2832,7 +2832,7 @@ function renderParcelasGrid(d) {
     const atrasada   = isAtrasada(p);
     const card = document.createElement('div');
     card.className = `parcela-card ${p.paga ? 'pago' : 'pendente'} ${atrasada ? 'atrasada' : ''}`;
-    card.style.animation = `fadeUp .5s ease ${0.35 + i * 0.05}s both`;
+    /* sem animação por cartão: re-renderizar a grade não deve reanimar as 24 parcelas */
 
     const valorLabel = isGratuita ? 'R$ 0,00' : `R$ ${p.valor.toLocaleString('pt-BR')}`;
     const subLabel = isGratuita ? 'sem desconto' : (isFinal ? 'parcela final' : 'mensal');
@@ -3655,7 +3655,7 @@ function obContagens() {
 
 function abrirOnboarding() {
   if (document.getElementById('ob-overlay')) return;
-  Object.assign(OB, { passo: 1, objetivo: null, temDivida: null,
+  Object.assign(OB, { passo: 1, objetivo: null, temDivida: null, novoPasso: true,
     base: { dividas: dividas.length, despesas: lancamentos.filter(l => l.tipo === 'despesa' && l.recorrente).length } });
   const ov = document.createElement('div');
   ov.id = 'ob-overlay'; ov.className = 'ob-overlay';
@@ -3725,7 +3725,7 @@ function renderOnboarding() {
   }
 
   const final = p > OB_TOTAL;
-  ov.innerHTML = `<div class="ob-card">
+  ov.innerHTML = `<div class="ob-card${OB.novoPasso ? ' ob-entra' : ''}">
     ${final ? '' : `<div class="ob-topo"><span class="ob-passo">Passo ${p} de ${OB_TOTAL}</span>
       <button class="ob-pular" data-ob="pular">Pular por enquanto</button></div>
       <div class="ob-barra"><div class="ob-barra-fill" style="width:${(p / OB_TOTAL) * 100}%"></div></div>`}
@@ -3738,6 +3738,7 @@ function renderOnboarding() {
         <button class="btn-secondary" data-ob="voltar" ${p === 1 ? 'style="visibility:hidden"' : ''}>Voltar</button>
         <button class="btn-primary" data-ob="avancar">${p === OB_TOTAL ? 'Finalizar' : 'Continuar'}</button>`}
     </div></div>`;
+  OB.novoPasso = false;
   obAtualizarContagem();
 }
 
@@ -3753,7 +3754,7 @@ async function obClique(e) {
     setTipoLancamentoModal('despesa');
     document.getElementById('input-lanc-recorrente').checked = true;
   }
-  else if (acao === 'voltar') { OB.passo--; renderOnboarding(); }
+  else if (acao === 'voltar') { OB.passo--; OB.novoPasso = true; renderOnboarding(); }
   else if (acao === 'avancar') {
     if (OB.passo === 3) {
       const v = document.getElementById('ob-salario').value;
@@ -3761,7 +3762,7 @@ async function obClique(e) {
       if (n !== null && (isNaN(n) || n < 0)) { showToast('Digite um valor válido'); return; }
       if (n !== null && n !== perfilAtual?.salario && !(await salvarFlagsPerfil({ salario: n }))) return;
     }
-    OB.passo++; renderOnboarding();
+    OB.passo++; OB.novoPasso = true; renderOnboarding();
   }
   else if (acao === 'pular') {
     await salvarFlagsPerfil({ onboarding_concluido: true });
@@ -4048,9 +4049,48 @@ document.addEventListener('click', e => {
   /* campo focado fica visível acima do teclado virtual */
   document.addEventListener('focusin', e => {
     if (!e.target.closest('.modal') || !matchMedia('(max-width: 720px)').matches) return;
-    setTimeout(() => e.target.scrollIntoView({ block: 'center', behavior: 'smooth' }), 250);
+    setTimeout(() => e.target.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }), 250);
   });
 })();
+
+/* ============================================================
+   MOTION EM LISTAS — realce de item novo e saída suave de item excluído
+   (envolve os render existentes; não altera dados nem cálculos)
+   ============================================================ */
+let _excluindo = false;
+const _idItem = el => el.dataset.id || el.querySelector('[data-id]')?.dataset.id;
+function envolverLista(nome, seletor) {
+  const base = window[nome];
+  window[nome] = function () {
+    const antes = [...document.querySelectorAll(seletor)].map(el => ({
+      id: _idItem(el), html: el.outerHTML, pai: el.parentElement, raiz: el.closest('[id]'), classe: el.parentElement.classList[0],
+      prox: el.nextElementSibling && _idItem(el.nextElementSibling), ant: el.previousElementSibling && _idItem(el.previousElementSibling) }));
+    base.apply(this, arguments);
+    if (!antes.length) return;
+    const ids = new Set(antes.map(x => x.id)), agora = [...document.querySelectorAll(seletor)];
+    agora.forEach(el => { if (!ids.has(_idItem(el))) el.classList.add('item-novo'); });
+    if (!_excluindo) return;
+    const presentes = new Set(agora.map(_idItem));
+    antes.filter(x => !presentes.has(x.id)).forEach(x => {
+      let pai = x.pai, ref = null;
+      const vizinho = id => id && agora.find(e => _idItem(e) === id);
+      if (vizinho(x.prox)) { ref = vizinho(x.prox); pai = ref.parentElement; }
+      else if (vizinho(x.ant)) { const a = vizinho(x.ant); pai = a.parentElement; ref = a.nextElementSibling; }
+      else if (!pai.isConnected) pai = x.raiz?.isConnected ? (x.classe && x.raiz.querySelector('.' + x.classe)) || x.raiz : null;
+      if (!pai) return;
+      const t = document.createElement('template'); t.innerHTML = x.html;
+      const g = t.content.firstElementChild; g.classList.add('item-saindo'); g.removeAttribute('data-id');
+      pai.insertBefore(g, ref || null);
+      g.addEventListener('animationend', () => g.remove()); setTimeout(() => g.remove(), 600);
+    });
+  };
+}
+envolverLista('renderMetas', '.meta-card');
+envolverLista('renderLancamentos', '.lanc-item');
+['excluirMeta', 'excluirLancamento'].forEach(nome => {
+  const base = window[nome];
+  window[nome] = async function () { _excluindo = true; try { return await base.apply(this, arguments); } finally { _excluindo = false; } };
+});
 
 /* ── Início ── */
 checkSession();
