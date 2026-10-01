@@ -2420,3 +2420,67 @@ html, body { overflow-x: hidden; }
   .modal-overlay.show .modal { transform: none; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-delay: 0s !important; } }
+
+/* ============================================================
+   MOBILE FIRST — etapa 3
+   ============================================================ */
+.modal input, .modal select, .modal textarea, .modal-input { box-sizing: border-box; max-width: 100%; min-width: 0; }
+.fab, .fab-menu { display: none; }
+
+@media (max-width: 720px) {
+  /* abas de dívidas: rolagem controlada, "+ Nova Dívida" sempre visível na ponta */
+  .tabs { overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { min-height: 44px; max-width: 70vw; overflow: hidden; text-overflow: ellipsis; scroll-snap-align: start; flex-shrink: 0; }
+  #btn-add-divida { position: sticky; right: 0; z-index: 2; box-shadow: -10px 0 12px -4px var(--bg); }
+  .parcelas-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+  .btn-notif { min-width: 44px; min-height: 44px; }
+  .filtro-select, .historico-filtros select, .historico-filtros input { min-height: 44px; }
+  .historico-filtros .filtro-select { min-width: 0; flex: 1 1 100%; }
+  /* Compromissos: vencimentos primeiro */
+  [data-bloco="proximos"] { order: -2; }
+  [data-bloco="criticas"] { order: -1; }
+  .cc-cmp-nota, .cc-painel .cc-evol-saldo { display: none; }
+  /* modal: respeita a tela e o teclado virtual */
+  .modal-overlay .modal { max-height: 92vh; overscroll-behavior: contain; }
+  @supports (height: 100dvh) { .modal-overlay .modal { max-height: 92dvh; } }
+  .modal-overlay .modal .btn-primary, .modal-overlay .modal .btn-secondary { width: 100%; }
+  /* ações rápidas "+" */
+  .fab { display: flex; align-items: center; justify-content: center; position: fixed; right: 16px; bottom: calc(76px + env(safe-area-inset-bottom)); z-index: 205;
+    width: 52px; height: 52px; border: none; border-radius: 16px; background: linear-gradient(135deg, #2f6bff, #1f4fe0); color: #fff;
+    font: 400 1.8rem/1 'DM Mono', monospace; box-shadow: 0 6px 18px rgba(0,0,0,.55); cursor: pointer; transition: transform .2s, background-color .2s; }
+  .fab[aria-expanded="true"] { transform: rotate(45deg); }
+  .fab:active { transform: scale(.94); }
+  .fab[aria-expanded="true"]:active { transform: rotate(45deg) scale(.94); }
+  .fab-menu { display: grid; gap: 4px; position: fixed; right: 16px; bottom: calc(136px + env(safe-area-inset-bottom)); z-index: 205; min-width: 190px; padding: 8px;
+    border-radius: 14px; border: 1px solid var(--border); background: #070b16; box-shadow: 0 12px 30px rgba(0,0,0,.6);
+    opacity: 0; visibility: hidden; transform: translateY(8px); transition: opacity .16s, transform .16s, visibility 0s linear .16s; }
+  .fab-menu.show { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
+  .fab-menu button { min-height: 46px; text-align: left; padding: 0 12px; border: none; border-radius: 10px; background: none; color: var(--text); font: 500 .85rem 'DM Mono', monospace; }
+  .fab-menu button:active { background: rgba(47,107,255,.16); }
+}
+@media (max-width: 340px) {
+  .container { padding-left: 12px; padding-right: 12px; }
+  .cc-saldo .stat-value { font-size: 1.8rem; }
+  .stat-value { font-size: 1.35rem; }
+}
+@media (max-width: 768px) {
+  #btn-add-divida { position: sticky; right: 0; z-index: 2; box-shadow: -10px 0 12px -4px var(--bg); }
+  .tab { min-height: 44px; max-width: 70vw; overflow: hidden; text-overflow: ellipsis; }
+}
+@media (max-width: 720px) {
+  /* cabeçalho compacto: logo à esquerda, sino à direita; o conteúdo financeiro aparece já na 1ª tela */
+  header { flex-direction: row !important; justify-content: space-between !important; align-items: center !important; text-align: left !important; margin-bottom: 12px; gap: 8px; }
+  .header-left h1 { font-size: 1.3rem; line-height: 1.1; text-align: left; }
+  .header-left h1 br { display: none; }
+  .header-left h1 span { display: inline; margin-left: .25em; }
+  .dashboard-header { margin-bottom: 16px; }
+  .dashboard-title { font-size: 1.4rem; }
+  .dashboard-badge, .dashboard-actions .btn-back { display: none; }
+}
+@media (max-width: 720px) {
+  .dashboard-header { gap: 0; margin-bottom: 12px; }
+  .dashboard-actions:has(> .btn-back:only-child) { display: none; }
+  .cc-layout { gap: 24px; }
+  .cc-cab { margin-bottom: 12px; }
+}

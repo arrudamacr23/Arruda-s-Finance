@@ -4028,5 +4028,27 @@ document.addEventListener('click', e => {
   if (!e.target.closest('#bnav, #bnav-mais')) document.getElementById('bnav-mais')?.classList.remove('show');
 });
 
+/* ============================================================
+   MOBILE — ações rápidas "+" e teclado virtual (reusa os modais existentes)
+   ============================================================ */
+(function () {
+  const fab = document.getElementById('fab'), menu = document.getElementById('fab-menu');
+  if (!fab || !menu) return;
+  const abrir = { lancamento: () => openLancamentoModal(), divida: () => openModal(), meta: () => openMetaModal() };
+  const alternar = (aberto) => { menu.classList.toggle('show', aberto); fab.setAttribute('aria-expanded', String(aberto)); };
+  fab.addEventListener('click', () => { document.getElementById('bnav-mais')?.classList.remove('show'); alternar(!menu.classList.contains('show')); });
+  menu.addEventListener('click', e => {
+    const b = e.target.closest('[data-fab]'); if (!b) return;
+    alternar(false); abrir[b.dataset.fab]();
+  });
+  document.addEventListener('click', e => { if (!e.target.closest('#fab, #fab-menu')) alternar(false); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') alternar(false); });
+  /* campo focado fica visível acima do teclado virtual */
+  document.addEventListener('focusin', e => {
+    if (!e.target.closest('.modal') || !matchMedia('(max-width: 720px)').matches) return;
+    setTimeout(() => e.target.scrollIntoView({ block: 'center', behavior: 'smooth' }), 250);
+  });
+})();
+
 /* ── Início ── */
 checkSession();
