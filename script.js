@@ -3785,7 +3785,7 @@ function primeirosPassosHtml() {
   ];
   const feitos = itens.filter(i => i.ok).length;
   const tudo = feitos === itens.length;
-  return `<div class="pp-card" id="primeiros-passos">
+  return `<div class="pp-card${tudo ? ' pp-compacto' : ''}" id="primeiros-passos">
     <div class="pp-topo"><div class="pp-titulo">🚀 Primeiros passos</div>
       <button class="pp-fechar" data-pp="fechar" aria-label="Fechar primeiros passos" title="Fechar">✕</button></div>
     <div class="pp-sub">${tudo ? '🎉 Você completou todos os primeiros passos!' : `${feitos} de ${itens.length} concluídos`}</div>
@@ -4023,6 +4023,9 @@ document.addEventListener('keydown', e => {
   const abertos = document.querySelectorAll('.modal-overlay.show');
   abertos[abertos.length - 1]?.click();
   if (painelNotificacoesAberto) fecharPainelNotificacoes();
+  document.getElementById('fab-menu')?.classList.remove('show');
+  document.getElementById('fab')?.setAttribute('aria-expanded', 'false');
+  document.getElementById('bnav-mais')?.classList.remove('show');
 });
 document.addEventListener('click', e => {
   if (!e.target.closest('#bnav, #bnav-mais')) document.getElementById('bnav-mais')?.classList.remove('show');
@@ -4042,7 +4045,6 @@ document.addEventListener('click', e => {
     alternar(false); abrir[b.dataset.fab]();
   });
   document.addEventListener('click', e => { if (!e.target.closest('#fab, #fab-menu')) alternar(false); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') alternar(false); });
   /* campo focado fica visível acima do teclado virtual */
   document.addEventListener('focusin', e => {
     if (!e.target.closest('.modal') || !matchMedia('(max-width: 720px)').matches) return;

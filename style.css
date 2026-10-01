@@ -20,6 +20,7 @@
   --accent3: #ff5c8a;     /* negativo: atraso/risco */
   --positive: #2ee59d;    /* positivo: pago/saudável */
   --text: #e6eeff;
+  --accent-text: #6c9bff;  /* azul para texto pequeno: contraste >= 4.5:1 */
 }
 
 body {
@@ -72,7 +73,7 @@ header {
 .header-left p {
   margin-top: 8px;
   font-size: 0.75rem;
-  color: #666688;
+  color: #8a97b8;
   letter-spacing: 2px;
   text-transform: uppercase;
 }
@@ -230,10 +231,10 @@ header {
 .stat-card.gold  { --line-color: #f0a060;        }
 
 .stat-label {
-  font-size: 0.65rem;
+  font-size: .72rem;
   letter-spacing: 2px;
   text-transform: uppercase;
-  color: #666688;
+  color: #8a97b8;
   margin-bottom: 12px;
 }
 
@@ -248,7 +249,7 @@ header {
 .stat-sub {
   margin-top: 8px;
   font-size: 0.7rem;
-  color: #666688;
+  color: #8a97b8;
 }
 
 /* ── PROGRESS ── */
@@ -266,7 +267,7 @@ header {
   font-weight: 700;
   letter-spacing: 3px;
   text-transform: uppercase;
-  color: #666688;
+  color: #8a97b8;
   margin-bottom: 24px;
 }
 
@@ -316,7 +317,7 @@ header {
   display: flex;
   justify-content: space-between;
   font-size: 0.7rem;
-  color: #666688;
+  color: #8a97b8;
 }
 
 .breakdown-grid {
@@ -383,7 +384,7 @@ header {
   transition: all .4s;
 }
 
-.donut-center .lbl { font-size: .6rem; color: #666688; letter-spacing: 1px; text-transform: uppercase; }
+.donut-center .lbl { font-size: .72rem; color: #8a97b8; letter-spacing: 1px; text-transform: uppercase; }
 
 /* ── TIMELINE ── */
 .timeline-section {
@@ -394,8 +395,8 @@ header {
 }
 
 .timeline-hint {
-  font-size: 0.68rem;
-  color: #555566;
+  font-size: .72rem;
+  color: #7d8bb0;
   letter-spacing: 1px;
   margin-bottom: 20px;
   display: flex;
@@ -452,7 +453,7 @@ header {
 }
 
 .parcela-card.pago     .parcela-mes { color: var(--positive); }
-.parcela-card.pendente .parcela-mes { color: #666688; }
+.parcela-card.pendente .parcela-mes { color: #8a97b8; }
 
 .parcela-valor {
   font-family: 'Syne', sans-serif;
@@ -460,11 +461,11 @@ header {
   font-weight: 800;
 }
 
-.parcela-valor small { font-size: .62rem; color: #666688; font-weight: 400; display: block; margin-top: 2px; }
+.parcela-valor small { font-size: .72rem; color: #8a97b8; font-weight: 400; display: block; margin-top: 2px; }
 
 .parcela-status {
   margin-top: 10px;
-  font-size: .62rem;
+  font-size: .72rem;
   letter-spacing: 1.5px;
   text-transform: uppercase;
   font-weight: 500;
@@ -472,7 +473,7 @@ header {
 }
 
 .parcela-card.pago     .parcela-status { color: var(--positive); }
-.parcela-card.pendente .parcela-status { color: #444455; }
+.parcela-card.pendente .parcela-status { color: #7d8bb0; }
 
 .check-icon {
   position: absolute;
@@ -496,8 +497,8 @@ header {
 .parcela-number {
   position: absolute;
   bottom: 10px; right: 12px;
-  font-size: .6rem;
-  color: #2a2a3a;
+  font-size: .72rem;
+  color: #7d8bb0;
   font-family: 'Syne', sans-serif;
   font-weight: 700;
 }
@@ -610,10 +611,10 @@ header {
 
 .modal-label {
   display: block;
-  font-size: 0.68rem;
+  font-size: .72rem;
   letter-spacing: 1.5px;
   text-transform: uppercase;
-  color: #666688;
+  color: #8a97b8;
   margin-bottom: 6px;
   margin-top: 16px;
 }
@@ -762,8 +763,8 @@ header {
 .footer-note {
   margin-top: 32px;
   text-align: center;
-  font-size: .65rem;
-  color: #2a2a3a;
+  font-size: .72rem;
+  color: #7d8bb0;
   letter-spacing: 2px;
   text-transform: uppercase;
 }
@@ -841,7 +842,7 @@ header {
 .auth-subtitle {
   text-align: center;
   font-size: 0.72rem;
-  color: #666688;
+  color: #8a97b8;
   letter-spacing: 1px;
   margin-top: 8px;
   margin-bottom: 28px;
@@ -871,7 +872,7 @@ header {
   margin-top: 20px;
   text-align: center;
   font-size: 0.72rem;
-  color: #666688;
+  color: #8a97b8;
 }
 
 .auth-toggle-btn {
@@ -900,7 +901,7 @@ header {
 
 .header-user-email {
   font-size: 0.7rem;
-  color: #666688;
+  color: #8a97b8;
   letter-spacing: 0.5px;
 }
 
@@ -992,7 +993,7 @@ header {
   align-items: center;
   justify-content: center;
   font-size: 3rem;
-  color: #444455;
+  color: #7d8bb0;
 }
 
 .perfil-avatar-placeholder.hide { display: none; }
@@ -1107,11 +1108,11 @@ header {
 .ed-parcela-row:last-child { border-bottom: none; }
 
 .ed-parcela-data { color: var(--text); font-weight: 500; }
-.ed-parcela-data span { color: #666688; }
+.ed-parcela-data span { color: #8a97b8; }
 
 .ed-parcela-status {
-  font-size: 0.65rem;
-  color: #666688;
+  font-size: .72rem;
+  color: #8a97b8;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -1208,7 +1209,7 @@ header {
 
 @media (max-width: 600px) {
   .mes-bar-row { grid-template-columns: 48px 1fr 80px; gap: 8px; }
-  .mes-bar-valor { font-size: 0.68rem; }
+  .mes-bar-valor { font-size: .72rem; }
 }
 
 /* ── VISÃO GERAL: banner de saúde financeira ── */
@@ -1241,7 +1242,7 @@ header {
 .saude-hero.saude-pink  { --saude-color: var(--accent3); }
 
 .saude-hero-label {
-  font-size: 0.68rem;
+  font-size: .72rem;
   letter-spacing: 2px;
   text-transform: uppercase;
   color: #888899;
@@ -1273,10 +1274,10 @@ header {
 
 .saude-hero-stat-lbl {
   display: block;
-  font-size: 0.65rem;
+  font-size: .72rem;
   letter-spacing: 1px;
   text-transform: uppercase;
-  color: #666688;
+  color: #8a97b8;
   margin-top: 4px;
 }
 
@@ -1354,7 +1355,7 @@ header {
   }
 
   .header-left h1 { font-size: 1.9rem; letter-spacing: -1px; }
-  .header-left p { font-size: 0.68rem; letter-spacing: 1px; }
+  .header-left p { font-size: .72rem; letter-spacing: 1px; }
 
   .header-right {
     width: 100%;
@@ -1365,7 +1366,7 @@ header {
   .header-user-email {
     width: 100%;
     order: -1;
-    font-size: 0.65rem;
+    font-size: .72rem;
     word-break: break-all;
   }
 
@@ -1373,7 +1374,7 @@ header {
     flex: 1 1 auto;
     text-align: center;
     padding: 10px 8px;
-    font-size: 0.68rem;
+    font-size: .72rem;
   }
 
   /* Abas com scroll horizontal em vez de empilhar em várias linhas */
@@ -1405,7 +1406,7 @@ header {
   .parcelas-grid { grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); gap: 10px; }
   .parcela-card { padding: 12px; }
   .parcela-valor { font-size: 1.05rem; }
-  .parcela-mes { font-size: 0.62rem; }
+  .parcela-mes { font-size: .72rem; }
 
   .quitadas-grid { grid-template-columns: 1fr; }
 
@@ -1500,10 +1501,10 @@ header {
 
 .pagamento-info { min-width: 0; }
 .pagamento-titulo { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pagamento-sub { font-size: 0.68rem; color: #888899; margin-top: 3px; letter-spacing: .5px; }
+.pagamento-sub { font-size: .72rem; color: #888899; margin-top: 3px; letter-spacing: .5px; }
 
 .pagamento-dias {
-  font-size: 0.68rem;
+  font-size: .72rem;
   font-weight: 700;
   padding: 4px 10px;
   border-radius: 100px;
@@ -1515,7 +1516,7 @@ header {
 
 .pagamento-valor { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 0.92rem; white-space: nowrap; }
 
-.geral-mais-nota { text-align: center; font-size: 0.7rem; color: #666688; margin-top: 12px; }
+.geral-mais-nota { text-align: center; font-size: 0.7rem; color: #8a97b8; margin-top: 12px; }
 
 /* ── Dívidas Críticas ── */
 .criticas-grid {
@@ -1542,7 +1543,7 @@ header {
 .critica-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 12px; }
 .critica-titulo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1rem; }
 .critica-prioridade {
-  font-size: 0.62rem;
+  font-size: .72rem;
   font-weight: 700;
   letter-spacing: 1px;
   text-transform: uppercase;
@@ -1610,7 +1611,7 @@ header {
 .geral-empty-mini {
   text-align: center;
   font-size: 0.75rem;
-  color: #666688;
+  color: #8a97b8;
   padding: 24px;
   border: 1.5px dashed var(--border);
   border-radius: 14px;
@@ -1690,7 +1691,7 @@ header {
 .historico-data { font-family: 'DM Mono', monospace; font-size: 0.72rem; color: #888899; }
 .historico-info { min-width: 0; }
 .historico-titulo { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 0.86rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.historico-sub { font-size: 0.68rem; color: #888899; margin-top: 3px; }
+.historico-sub { font-size: .72rem; color: #888899; margin-top: 3px; }
 .historico-valor { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 0.92rem; color: var(--positive); white-space: nowrap; }
 
 /* ── Modal de detalhes do pagamento ── */
@@ -1762,7 +1763,7 @@ header {
   background: var(--accent3);
   color: #fff;
   font-family: 'DM Mono', monospace;
-  font-size: 0.62rem;
+  font-size: .72rem;
   font-weight: 700;
   border-radius: 100px;
   align-items: center;
@@ -1811,7 +1812,7 @@ header {
   border: none;
   color: var(--accent);
   font-family: 'DM Mono', monospace;
-  font-size: 0.66rem;
+  font-size: .72rem;
   cursor: pointer;
   padding: 4px 0;
 }
@@ -1829,7 +1830,7 @@ header {
 .notif-empty {
   text-align: center;
   font-size: 0.78rem;
-  color: #666688;
+  color: #8a97b8;
   padding: 32px 16px;
 }
 
@@ -1865,7 +1866,7 @@ header {
   border: 1px solid var(--border);
   background: transparent;
   color: #888899;
-  font-size: 0.68rem;
+  font-size: .72rem;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1920,7 +1921,7 @@ header {
 
 .meta-status {
   flex-shrink: 0;
-  font-size: 0.64rem;
+  font-size: .72rem;
   font-weight: 700;
   letter-spacing: .3px;
   padding: 4px 10px;
@@ -2132,7 +2133,7 @@ body::before {
 .parcela-card:hover { box-shadow: 0 10px 34px rgba(47,107,255,.2); }
 .parcela-card:active { transform: scale(.97); }
 .modal-overlay { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
-.modal { animation: modalIn .35s cubic-bezier(.16,1,.3,1) both; box-shadow: 0 30px 80px rgba(0,0,0,.7), 0 0 0 1px rgba(47,107,255,.2); }
+.modal { box-shadow: 0 30px 80px rgba(0,0,0,.7), 0 0 0 1px rgba(47,107,255,.2); }
 @keyframes modalIn { from { opacity: 0; transform: translateY(18px) scale(.96); } to { opacity: 1; transform: none; } }
 .modal-input:focus { box-shadow: 0 0 0 3px rgba(47,107,255,.25); outline: none; }
 
@@ -2484,3 +2485,43 @@ html, body { overflow-x: hidden; }
   .cc-layout { gap: 24px; }
   .cc-cab { margin-bottom: 12px; }
 }
+
+
+/* ============================================================
+   AUDITORIA FINAL — polimento (contraste, alvos de toque, foco, cabeçalho)
+   ============================================================ */
+.notif-badge { font-size: .66rem; }
+/* pulso de atraso: 3 repetições (a regra mais específica antes mantinha infinito) */
+.parcela-card.atrasada:not(.pago) { animation-iteration-count: 3; }
+/* foco de teclado também nos campos que removem o outline padrão */
+.modal-input:focus-visible, .ed-parcela-valor-input:focus-visible, .filtro-select:focus-visible { outline: 2px solid var(--accent2); outline-offset: 1px; }
+/* dados primeiro: cabeçalho enxuto no desktop/tablet */
+@media (min-width: 721px) {
+  header { align-items: center; flex-wrap: nowrap; margin-bottom: 20px; gap: 24px; }
+  .container { padding-top: 28px; }
+  .header-left h1 { font-size: 1.6rem; line-height: 1.1; white-space: nowrap; }
+  .header-left h1 br { display: none; }
+  .header-left h1 span { display: inline; margin-left: .25em; }
+  .header-left p { display: none; }
+  .header-right { flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+  #view-geral .dashboard-badge { display: none; }
+  .dashboard-header { margin-bottom: 20px; }
+}
+/* Primeiros passos concluído vira uma faixa discreta; nunca compete com os números */
+.pp-card { border-color: var(--border); box-shadow: none; }
+.pp-compacto { padding: 12px 16px; }
+.pp-compacto .pp-barra, .pp-compacto .pp-lista { display: none; }
+.pp-compacto .pp-sub { margin: 2px 0 0; }
+/* alvos de toque de 44px no celular (área clicável cresce sem mudar o desenho) */
+@media (max-width: 720px) {
+  .btn-delete, .lanc-btn-excluir, .pp-fechar { position: relative; }
+  .btn-delete::after, .lanc-btn-excluir::after, .pp-fechar::after, .parcela-edit-btn::after, .perfil-avatar-btn::after {
+    content: ''; position: absolute; inset: -6px; }
+  .meta-btn-editar, .meta-btn-excluir, #btn-abrir-exclusao-conta { min-height: 44px; }
+}
+
+/* texto em azul (valores) usa o tom claro; o azul puro fica para fundos e barras */
+.resumo-mes-valor, .progress-pct, .mes-bar-valor, .historico-valor, .strong { color: var(--accent-text); }
+.historico-valor { color: var(--positive); }
+@media (max-width: 720px) { .bnav button { font-size: .72rem; } }
+[style*="color:var(--accent)"]:not([style*="background"]), [style*="color: var(--accent)"]:not([style*="background"]) { color: var(--accent-text) !important; }
