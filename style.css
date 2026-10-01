@@ -2207,7 +2207,6 @@ body::before {
 .quitada-card:hover, .quitadas-resumo:hover, .tab:hover { transform: none; box-shadow: none; }
 .parcela-card:hover { transform: translateY(-2px); box-shadow: none; }
 .parcela-card.pago .check-icon { box-shadow: none; }
-.view-fade-in .mes-bar-fill, .view-fade-in .progress-bar-fill { animation: growX var(--dur-slow) var(--ease-out) both; transform-origin: left; }
 @keyframes growX { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 .stat-label { font-size: .72rem; }
 .stat-sub { font-size: .74rem; }
@@ -2308,8 +2307,6 @@ html, body { overflow-x: hidden; }
 .cc-evol-barras .b { display: block; width: 40%; max-width: 16px; min-height: 2px; border-radius: 3px 3px 0 0; transform-origin: bottom; }
 .cc-evol-mes { font-size: .72rem; color: #7d8bb0; }
 .cc-evol-saldo { font-size: .7rem; }
-.view-fade-in .cc-cmp-barra i { animation: growX var(--dur-slow) var(--ease-out) both; transform-origin: left; }
-.view-fade-in .cc-evol-barras .b { animation: growY var(--dur-slow) var(--ease-out) both; }
 @keyframes growY { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 
 /* alertas e metas com estado visível */
@@ -2393,7 +2390,6 @@ html, body { overflow-x: hidden; }
 
 /* gráficos e metas: entrada curta; preenchimento suave; meta atingida pisca uma vez */
 .progress-bar-fill { transition: width var(--dur-slow) var(--ease-out); }
-.view-fade-in .mes-bar-fill, .view-fade-in .progress-bar-fill, .view-fade-in .cc-cmp-barra i, .view-fade-in .cc-evol-barras .b { animation-duration: var(--dur-slow); }
 .meta-card.meta-conquistada { animation: metaOk 1s ease-out 1; }
 @keyframes metaOk { 0% { box-shadow: 0 0 0 0 rgba(46,229,157,.5); border-color: var(--positive); } 100% { box-shadow: 0 0 0 12px rgba(46,229,157,0); } }
 
@@ -2560,3 +2556,101 @@ html.rv-on .rv:not(.rv-in) { opacity: 0; }
 html.rv-on .view-fade-in { animation: rvView var(--dur-fast) ease-out both; }
 @keyframes rvView { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .rv, .rv.rv-in { opacity: 1 !important; animation: none !important; } }
+
+
+/* ============================================================
+   MICROINTERAÇÕES PREMIUM — camada final (sobre os tokens de motion)
+   Hover só com mouse; no toque, :active e :focus-visible dão o feedback.
+   ============================================================ */
+:root { --lift: -2px; }
+button, [role="button"], .parcela-card, .critica-card, .pagamento-item, .historico-item, .quitada-card, .lanc-item, .notif-item, label.modal-check-row {
+  -webkit-tap-highlight-color: transparent; }
+
+/* 1. pressionar: resposta imediata em todo botão (100ms) */
+button:not(:disabled):active, [role="button"]:active { transform: scale(.97); transition-duration: var(--dur-press); }
+.bnav button:active { transform: scale(.94); }
+.pp-fechar { transition: var(--tr-ui); }
+.pp-fechar:active { transform: rotate(90deg) scale(.92); }
+.notif-item:active, .notif-item-marcar:active, .notif-marcar-todas:active { background-color: rgba(47,107,255,.14); }
+
+/* 2. item de navegação ativo (desktop/tablet) */
+.header-right .btn-back.ativo { background: rgba(47,107,255,.16); border-color: var(--accent); color: var(--text); }
+
+/* 3. cartões clicáveis: um único gesto de elevação (2px) + sombra, só com mouse */
+@media (hover: hover) {
+  .parcela-card:hover, .critica-card:hover, .pagamento-item:hover, .historico-item:hover, .quitada-card:hover, .lanc-item:hover {
+    transform: translateY(var(--lift)); border-color: #2a3f78; box-shadow: 0 10px 22px -10px rgba(0,0,0,.75); }
+  .pp-fechar:hover { transform: rotate(90deg); color: var(--text); background: rgba(255,255,255,.06); }
+  .btn-notif:hover, .btn-notif:focus-visible { animation: sino .5s var(--ease-out) 1; }
+  .modal-input:hover:not(:focus) { border-color: #2a3f78; }
+  label.modal-check-row:hover { color: var(--text); }
+}
+@keyframes sino { 20% { transform: rotate(-12deg); } 45% { transform: rotate(9deg); } 70% { transform: rotate(-5deg); } }
+
+/* 4. toque: sem "hover preso"; cartões e menus afundam e ganham tom ao tocar */
+@media (hover: none) {
+  .critica-card:hover, .pagamento-item:hover { transform: none; }
+  .critica-card:active, .pagamento-item:active { transform: scale(.985); background-color: rgba(47,107,255,.10); transition-duration: var(--dur-press); }
+}
+
+/* 5. campos: cursor e controles na cor da marca; rótulo acende quando o campo está em foco */
+input, textarea { caret-color: var(--accent2); }
+input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color: var(--accent); }
+.modal-label { transition: color var(--dur-fast) var(--ease-out); }
+@supports selector(:has(*)) {
+  .modal-label:has(+ .modal-input:focus), .modal-label:has(+ select:focus) { color: var(--accent2); }
+}
+
+/* 6. toast: ícone de estado (não depende só da cor) e troca suave sucesso ↔ erro */
+.toast { transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out), border-left-color var(--dur-fast) var(--ease-out); }
+.toast::before { content: '✓'; margin-right: 8px; font-weight: 700; color: var(--positive); }
+.toast.erro::before { content: '!'; color: var(--accent3); }
+@media (prefers-reduced-motion: reduce) { .btn-notif:hover, .btn-notif:focus-visible { animation: none; } }
+
+
+/* ============================================================
+   GRÁFICOS — entrada animada (disparada pelo FxReveal via .ch-go)
+   ============================================================
+   Só roda quando o cartão do gráfico aparece pela primeira vez (ou quando os
+   dados mudam); .ch-go é removido ao final, então voltar à tela não reanima.
+   --ch-delay = atraso do cartão; --r = escalonamento entre barras/colunas.
+   Kit para futuros gráficos SVG de linha/área/ponto: .ch-line (path/polyline com
+   pathLength="1"), .ch-area e .ch-pt (com style="--i:índice"). */
+@property --sweep { syntax: '<percentage>'; inherits: false; initial-value: 100%; }
+.donut-wrap svg { -webkit-mask-image: conic-gradient(from 90deg, #000 var(--sweep), transparent 0); mask-image: conic-gradient(from 90deg, #000 var(--sweep), transparent 0); }
+.mes-bar-row:nth-child(2), .breakdown-item:nth-child(2), .cc-evol-col:nth-child(2) { --r: 50ms; }
+.mes-bar-row:nth-child(3), .breakdown-item:nth-child(3), .cc-evol-col:nth-child(3) { --r: 100ms; }
+.mes-bar-row:nth-child(4), .breakdown-item:nth-child(4), .cc-evol-col:nth-child(4) { --r: 150ms; }
+.mes-bar-row:nth-child(5), .breakdown-item:nth-child(5), .cc-evol-col:nth-child(5) { --r: 200ms; }
+.mes-bar-row:nth-child(n+6), .breakdown-item:nth-child(n+6), .cc-evol-col:nth-child(n+6) { --r: 250ms; }
+.ch-go .mes-bar-fill, .ch-go .breakdown-bar-fill, .ch-go .progress-bar-fill, .ch-go .cc-cmp-barra i {
+  transform-origin: left; animation: growX var(--dur-slow) var(--ease-out) calc(var(--ch-delay, 0ms) + var(--r, 0ms)) backwards; }
+.ch-go .cc-cmp-barra .sai { animation-delay: calc(var(--ch-delay, 0ms) + 80ms); }
+.ch-go .cc-evol-barras .b { animation: growY var(--dur-slow) var(--ease-out) calc(var(--ch-delay, 0ms) + var(--r, 0ms)) backwards; }
+.ch-go .donut-wrap svg { animation: chSweep calc(var(--dur-slow) * 1.3) var(--ease-out) var(--ch-delay, 0ms) backwards; }
+@keyframes chSweep { from { --sweep: 0%; } }
+/* legendas, valores e marcadores entram depois das barras, só com fade */
+.ch-go .mes-bar-valor, .ch-go .mes-bar-label, .ch-go .breakdown-item-top, .ch-go .cc-evol-mes, .ch-go .cc-evol-saldo {
+  animation: chFade var(--dur-base) var(--ease-out) calc(var(--ch-delay, 0ms) + var(--r, 0ms) + 120ms) backwards; }
+.ch-go .mes-bar-salario-marker, .ch-go .cc-cmp-leg, .ch-go .cc-cmp-nota, .ch-go .donut-center, .ch-go .progress-info {
+  animation: chFade var(--dur-base) var(--ease-out) calc(var(--ch-delay, 0ms) + 260ms) backwards; }
+@keyframes chFade { from { opacity: 0; } }
+/* kit SVG: linha desenhada, área surgindo, pontos em sequência */
+.ch-go .ch-line { stroke-dasharray: 1; animation: chDraw calc(var(--dur-slow) * 1.4) var(--ease-out) var(--ch-delay, 0ms) backwards; }
+@keyframes chDraw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.ch-go .ch-area { animation: chFade calc(var(--dur-slow) * 1.2) ease-out calc(var(--ch-delay, 0ms) + 200ms) backwards; }
+.ch-go .ch-pt { transform-box: fill-box; transform-origin: center;
+  animation: chPop var(--dur-base) var(--ease-out) calc(var(--ch-delay, 0ms) + 300ms + var(--i, 0) * 40ms) backwards; }
+@keyframes chPop { from { opacity: 0; transform: scale(.4); } }
+@media (prefers-reduced-motion: reduce) { .ch-go * { animation: none !important; } .donut-wrap svg { -webkit-mask-image: none; mask-image: none; } }
+
+
+/* ajustes encontrados ao revisar os gráficos */
+/* donuts: gradientes ainda estavam no verde-limão da paleta antiga (cores fixas dentro do SVG) */
+[id="g1"] stop:first-child { stop-color: var(--accent2); }
+[id="g1"] stop:last-child  { stop-color: var(--positive); }
+[id="g2"] stop:first-child { stop-color: var(--accent); }
+[id="g2"] stop:last-child  { stop-color: var(--accent2); }
+/* parcelas: o lápis de editar cobria o início do nome do mês; o conteúdo desce para ficar abaixo dele */
+.parcela-card { padding-top: 30px; }
+.parcela-edit-btn { top: 6px; left: 6px; width: 22px; height: 22px; }

@@ -31,6 +31,9 @@
    • Roda UMA vez por elemento a cada visita a uma tela (no máximo 12 por lote); redesenhar a tela por uma ação
      do usuário (marcar parcela, salvar...) não reanima o que já foi visto.
    • Terminada a entrada, as classes são removidas (hover e transições voltam ao normal).
+   • Gráficos: ao revelar um cartão com gráfico, ele recebe .ch-go (ver CSS "GRÁFICOS"): barras
+     crescem, o donut é desenhado, legendas surgem com fade. Uma vez por sessão: depois, só os valores mudam
+     (as transições de largura e de arco do donut já existentes).
    • Para incluir novos componentes, acrescente o seletor em CARTAO ou LINHA.
    Fica ANTES do FxCount de propósito: marca os cartões como ocultos antes de os
    contadores decidirem se começam. */
@@ -44,6 +47,9 @@
   const FORA = '.modal-overlay, .ob-overlay, .notif-panel, header, .bnav, .bnav-mais, .fab-menu, .auth-box, .sk-grid, .item-saindo';
   const mobile = matchMedia('(max-width: 720px)');
   const vistos = new Set();
+  /* gráficos: o cartão ganha .ch-go na 1ª vez que aparece na sessão; depois só os valores mudam (transições já existentes) */
+  const GRAFICO = '.mes-bar-fill, .breakdown-bar-fill, .progress-bar-fill, .cc-cmp-barra, .cc-evol-barras, .donut-circle, .ch-line, .ch-area, .ch-pt';
+  const grafMem = new Set();
 
   const duracao = () => {
     const t = getComputedStyle(document.documentElement).getPropertyValue('--dur-base').trim();
@@ -83,6 +89,13 @@
       el.style.setProperty('--rv-delay', atraso + 'ms');
       el.classList.add('rv-in');
       vistos.add(el._rvk);
+      if (el.querySelector(GRAFICO)) {                          // 1ª aparição do gráfico nesta sessão: anima a entrada
+        if (!grafMem.has(el._rvk)) {
+          grafMem.add(el._rvk);
+          el.style.setProperty('--ch-delay', atraso + 'ms'); el.classList.add('ch-go');
+          setTimeout(() => { el.classList.remove('ch-go'); el.style.removeProperty('--ch-delay'); }, 1600);
+        }
+      }
       setTimeout(() => window.FxCount?.liberar(el), atraso);    // os números do cartão começam junto com ele
       setTimeout(() => limpar(el), dur + atraso + 120);
     });
@@ -111,6 +124,7 @@
     };
   }
 
+  if (typeof supabaseClient !== 'undefined') supabaseClient.auth.onAuthStateChange(ev => { if (ev === 'SIGNED_OUT') grafMem.clear(); });
   reduzido.addEventListener?.('change', () => {
     if (!reduzido.matches) return;
     document.documentElement.classList.remove('rv-on'); document.querySelectorAll('.rv').forEach(limpar);
