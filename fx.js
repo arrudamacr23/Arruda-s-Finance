@@ -34,7 +34,9 @@
    • Gráficos: ao revelar um cartão com gráfico, ele recebe .ch-go (ver CSS "GRÁFICOS"): barras
      crescem, o donut é desenhado, legendas surgem com fade. Uma vez por sessão: depois, só os valores mudam
      (as transições de largura e de arco do donut já existentes).
-   • Para incluir novos componentes, acrescente o seletor em CARTAO ou LINHA.
+   • Abertura do painel: na 1ª vez que a Visão Geral aparece na sessão, os cartões entram em fases
+     (cartões 60ms → gráficos 220ms → secundários 360ms; sequência completa ≤ ~1,2s). No celular os
+     secundários aparecem sem animação. Para incluir novos componentes, acrescente o seletor em CARTAO ou LINHA.
    Fica ANTES do FxCount de propósito: marca os cartões como ocultos antes de os
    contadores decidirem se começam. */
 (function () {
@@ -50,6 +52,13 @@
   /* gráficos: o cartão ganha .ch-go na 1ª vez que aparece na sessão; depois só os valores mudam (transições já existentes) */
   const GRAFICO = '.mes-bar-fill, .breakdown-bar-fill, .progress-bar-fill, .cc-cmp-barra, .cc-evol-barras, .donut-circle, .ch-line, .ch-area, .ch-pt';
   const grafMem = new Set();
+  /* ABERTURA DO PAINEL — na 1ª vez que a Visão Geral aparece na sessão, o reveal segue fases em vez de só ordem de página:
+     1 cartões financeiros (+ números) → 2 gráficos e blocos → 3 elementos secundários. Dados já estão no DOM desde o início. */
+  const FASE1 = '.pp-card, .stat-card, .saude-hero, .saude-cta';
+  const FASE2 = '.cc-painel, .chart-card, .progress-section';
+  const BASE_FASE = [0, 60, 220, 360];                     // ms em que cada fase começa
+  let introPendente = false, introFeita = false;
+  const fase = el => el.matches(FASE1) ? 1 : el.matches(FASE2) ? 2 : 3;
 
   const duracao = () => {
     const t = getComputedStyle(document.documentElement).getPropertyValue('--dur-base').trim();
@@ -82,10 +91,23 @@
   function revelar(lote) {
     const passo = mobile.matches ? 35 : 45, max = mobile.matches ? 210 : 270, dur = duracao();
     lote.sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1);
+    const intro = introPendente && lote.some(el => el.closest('#view-geral'));
+    if (intro) {                                             // sequência de abertura: só uma vez por sessão
+      introPendente = false; introFeita = true;
+      const g = document.getElementById('geral-content');
+      g.classList.add('intro-on'); setTimeout(() => g.classList.remove('intro-on'), 1600);
+    }
+    const cont = [0, 0, 0, 0];
     lote.forEach((el, i) => {
-      const atraso = Math.min(i * passo, max);
+      let atraso = Math.min(i * passo, max), pular = false;
+      if (intro && el.closest('#view-geral')) {
+        const fs = fase(el), k = cont[fs]++;
+        atraso = BASE_FASE[fs] + Math.min(k * 40, fs === 1 ? 160 : 80);   // 40ms entre cartões (cartões: até 4 intervalos; demais: 2)
+        pular = mobile.matches && fs === 3;                   // celular: elementos secundários aparecem sem animação
+      }
       io.unobserve(el);
-      if (i >= 12) { vistos.add(el._rvk); limpar(el); window.FxCount?.liberar(el); return; }   // lotes grandes: só os 12 primeiros animam
+      if (pular) { vistos.add(el._rvk); limpar(el); window.FxCount?.liberar(el); return; }
+      if (!intro && i >= 12) { vistos.add(el._rvk); limpar(el); window.FxCount?.liberar(el); return; }   // lotes grandes: só os 12 primeiros animam
       el.style.setProperty('--rv-delay', atraso + 'ms');
       el.classList.add('rv-in');
       vistos.add(el._rvk);
@@ -118,13 +140,14 @@
     const base = mostrarView;
     mostrarView = function (id) {
       vistos.clear();
+      if (id === 'view-geral' && !introFeita) introPendente = true;
       const r = base.apply(this, arguments);
       document.getElementById(id)?.querySelectorAll(TODOS).forEach(el => { if (!el.classList.contains('rv')) { el._rv = 0; preparar(el); } });   // elementos já na tela também revelam ao voltar
       return r;
     };
   }
 
-  if (typeof supabaseClient !== 'undefined') supabaseClient.auth.onAuthStateChange(ev => { if (ev === 'SIGNED_OUT') grafMem.clear(); });
+  if (typeof supabaseClient !== 'undefined') supabaseClient.auth.onAuthStateChange(ev => { if (ev === 'SIGNED_OUT') { grafMem.clear(); introFeita = false; introPendente = false; } });
   reduzido.addEventListener?.('change', () => {
     if (!reduzido.matches) return;
     document.documentElement.classList.remove('rv-on'); document.querySelectorAll('.rv').forEach(limpar);

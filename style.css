@@ -2709,3 +2709,12 @@ html.vt-on .view-fade-in { animation: none; }
   animation: metaSelo var(--dur-base) var(--ease-out) calc(var(--ch-delay, 0ms) + 80ms + var(--dur-meta) - 120ms) backwards; }
 @keyframes metaSelo { from { opacity: 0; transform: scale(.88); } }
 @media (prefers-reduced-motion: reduce) { .meta-card.concluida.meta-conquistada .progress-bar-wrap::after { animation: none; } }
+
+
+/* ============================================================
+   ABERTURA DO PAINEL (fx.js · FxReveal "fases") — só na 1ª vez da sessão
+   ============================================================
+   Estrutura (títulos das seções) surge no início; cartões, gráficos e secundários
+   entram em fases pelo mesmo mecanismo de reveal. Nada bloqueia cliques. */
+#geral-content.intro-on .cc-cab { animation: chFade var(--dur-base) var(--ease-out) backwards; }
+@media (max-width: 720px) { .mes-bar-row, .breakdown-item, .cc-evol-col { --r: 0ms !important; } }
