@@ -1653,7 +1653,7 @@ function renderMetas() {
         const prazoLabel = m.prazo ? new Date(m.prazo + 'T00:00:00').toLocaleDateString('pt-BR') : null;
 
         return `
-        <div class="meta-card" data-id="${m.id}">
+        <div class="meta-card${status.id === 'concluida' ? ' concluida' : ''}" data-id="${m.id}">
           <div class="meta-card-top">
             <div class="meta-card-titulo">🎯 ${m.nome}</div>
             <div class="meta-status ${status.cor}">${status.icone} ${status.label}</div>
@@ -4019,6 +4019,13 @@ renderMetas = function () {
     if (antes !== undefined && antes < 100 && pct >= 100) {
       document.querySelector(`.meta-card[data-id="${m.id}"]`)?.classList.add('meta-conquistada');
       showToast('🎯 Meta atingida: ' + m.nome);
+    }
+    /* progresso que aumentou (editar valor, pagar parcela de meta vinculada): a barra avança do ponto anterior ao novo */
+    const barra = document.querySelector(`.meta-card[data-id="${m.id}"] .progress-bar-fill`);
+    if (barra && barra.animate && antes !== undefined && pct > antes && pct > 0 && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const dur = (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--dur-slow')) || 0.45) * 1500;
+      barra.animate([{ clipPath: `inset(0 ${(1 - antes / pct) * 100}% 0 0 round 100px)` }, { clipPath: 'inset(0 0 0 0 round 100px)' }],
+        { duration: dur, delay: 80, easing: 'cubic-bezier(.215,.61,.355,1)', fill: 'backwards' });
     }
     _pctMetas.set(m.id, pct);
   });

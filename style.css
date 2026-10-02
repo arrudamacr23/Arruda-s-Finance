@@ -2682,3 +2682,30 @@ html.vt-on .view-fade-in { animation: none; }
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
   .aba-troca, .ob-overlay, .ob-overlay.ob-saindo, .saindo-suave { animation: none; }
 }
+
+
+/* ============================================================
+   METAS — preenchimento de progresso e feedback de conclusão
+   ============================================================
+   A largura real vem do cálculo (style="width:X%"); a animação só revela essa
+   largura com clip-path (sem distorcer o degradê, sem layout). Número e barra
+   usam a mesma duração (--dur-meta) e a mesma curva para chegarem juntos. */
+:root { --ease-cubic: cubic-bezier(.215, .61, .355, 1); --dur-meta: calc(var(--dur-slow) * 1.5); }
+.meta-card .progress-bar-fill, .at-meta .progress-bar-fill { clip-path: inset(0 0 0 0 round 100px); }
+.meta-card.ch-go .progress-bar-fill, .ch-go .at-meta .progress-bar-fill {
+  transform: none; animation: metaFill var(--dur-meta) var(--ease-cubic) calc(var(--ch-delay, 0ms) + 80ms) backwards; }
+@keyframes metaFill { from { clip-path: inset(0 100% 0 0 round 100px); } }
+/* meta concluída: verde (resultado positivo), um brilho que cruza a barra uma vez e o selo aparece ao final */
+.meta-card.concluida { border-color: rgba(46,229,157,.3); }
+.meta-card.concluida .progress-bar-fill { background: linear-gradient(90deg, #1fb67c, var(--positive)); }
+.meta-card.concluida .progress-pct { color: var(--positive); }
+.meta-card.concluida .progress-bar-wrap { position: relative; }
+.meta-card.concluida .progress-bar-wrap::after { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background: linear-gradient(100deg, transparent 35%, rgba(255,255,255,.3) 50%, transparent 65%); transform: translateX(-100%); }
+.meta-card.concluida.ch-go .progress-bar-wrap::after, .meta-card.concluida.meta-conquistada .progress-bar-wrap::after {
+  animation: metaBrilho 800ms ease-out calc(var(--ch-delay, 0ms) + 80ms + var(--dur-meta)) both; }
+@keyframes metaBrilho { from { opacity: 1; transform: translateX(-100%); } to { opacity: 1; transform: translateX(100%); } }
+.meta-card.concluida.ch-go .meta-status {
+  animation: metaSelo var(--dur-base) var(--ease-out) calc(var(--ch-delay, 0ms) + 80ms + var(--dur-meta) - 120ms) backwards; }
+@keyframes metaSelo { from { opacity: 0; transform: scale(.88); } }
+@media (prefers-reduced-motion: reduce) { .meta-card.concluida.meta-conquistada .progress-bar-wrap::after { animation: none; } }

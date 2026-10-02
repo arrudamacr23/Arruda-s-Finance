@@ -93,7 +93,7 @@
         if (!grafMem.has(el._rvk)) {
           grafMem.add(el._rvk);
           el.style.setProperty('--ch-delay', atraso + 'ms'); el.classList.add('ch-go');
-          setTimeout(() => { el.classList.remove('ch-go'); el.style.removeProperty('--ch-delay'); }, 1600);
+          setTimeout(() => { el.classList.remove('ch-go'); el.style.removeProperty('--ch-delay'); }, 2300);
         }
       }
       setTimeout(() => window.FxCount?.liberar(el), atraso);    // os números do cartão começam junto com ele
@@ -179,8 +179,10 @@
     const f = el._fx;
     f.pendente = false;
     memoria.set(f.k, f.alvo);                                     // só "consome" a animação quando ela de fato roda
-    f.dur = duracao();
-    f.t0 = performance.now() + Math.min(lote++ * 45, 225);          // cascata curta entre indicadores do mesmo lote
+    const meta = el.closest('.meta-card, .at-meta');                 // metas: número e barra usam a mesma duração (1,5×) e partida (+80ms)
+    f.dur = duracao() * (meta ? 1.5 : 1);
+    const noCartao = el.closest('.rv-in, .ch-go');                   // dentro de um cartão revelado, o atraso do cartão já escalona
+    f.t0 = performance.now() + (meta ? 80 : noCartao ? 0 : Math.min(lote++ * 45, 225));
     if (!loteTimer) loteTimer = setTimeout(() => { lote = 0; loteTimer = 0; }, 60);
     escrever(el, f.de);
     el.dataset.fxAnim = '1'; ativos.add(el);
