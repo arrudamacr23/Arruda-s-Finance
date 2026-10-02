@@ -1662,7 +1662,7 @@ function renderMetas() {
           ${progresso.dividaNaoEncontrada ? `<div class="meta-card-aviso">⚠️ A dívida vinculada a essa meta não existe mais. Edite pra desvincular ou ajustar.</div>` : ''}
 
           <div class="progress-header" style="margin-top:14px;">
-            <span class="progress-label">R$ ${progresso.atual.toLocaleString('pt-BR')} de R$ ${progresso.objetivo.toLocaleString('pt-BR')}</span>
+            <span class="progress-label">R$ <span data-count>${progresso.atual.toLocaleString('pt-BR')}</span> de R$ ${progresso.objetivo.toLocaleString('pt-BR')}</span>
             <span class="progress-pct">${progresso.pct}%</span>
           </div>
           <div class="progress-bar-wrap">
@@ -3668,7 +3668,7 @@ function abrirOnboarding() {
 
 function fecharOnboardingUI() {
   clearInterval(OB.timer);
-  document.getElementById('ob-overlay')?.remove();
+  sairSuave(document.getElementById('ob-overlay'), 'ob-saindo');
 }
 
 function obTextoContagem(n, singular, plural, vazio) {
@@ -3807,7 +3807,7 @@ document.addEventListener('click', async (e) => {
   const b = e.target.closest('[data-pp]');
   if (!b) return;
   const a = b.dataset.pp;
-  if (a === 'fechar') { if (await salvarFlagsPerfil({ primeiros_passos_oculto: true })) document.getElementById('primeiros-passos')?.remove(); }
+  if (a === 'fechar') { if (await salvarFlagsPerfil({ primeiros_passos_oculto: true })) sairSuave(document.getElementById('primeiros-passos')); }
   else if (a === 'divida') { showDividasView(); openModal(); }
   else if (a === 'renda') showPerfilView();
   else if (a === 'meta') { showMetasView(); openMetaModal(); }
@@ -3972,6 +3972,12 @@ iniciarApp = async function () {
       const v = views[b.dataset.nav];
       b.classList.toggle('ativo', v ? v === id : (b.dataset.nav === 'mais' && ['view-historico', 'view-perfil'].includes(id)));
     });
+    const topo = { 'view-geral': 'btn-geral', 'view-lancamentos': 'btn-lancamentos', 'view-historico': 'btn-historico', 'view-metas': 'btn-metas', 'view-perfil': 'btn-perfil' };
+    Object.values(topo).forEach(bid => {   /* item ativo também no menu do topo (desktop/tablet) */
+      const el = document.getElementById(bid); if (!el) return;
+      const ativo = topo[id] === bid;
+      el.classList.toggle('ativo', ativo); ativo ? el.setAttribute('aria-current', 'page') : el.removeAttribute('aria-current');
+    });
   };
 })();
 
@@ -4091,6 +4097,74 @@ envolverLista('renderLancamentos', '.lanc-item');
   const base = window[nome];
   window[nome] = async function () { _excluindo = true; try { return await base.apply(this, arguments); } finally { _excluindo = false; } };
 });
+
+/* ============================================================
+   TRANSIÇÕES — telas, abas e sobreposições (só apresentação)
+   Envolvem as funções existentes; roteamento, autenticação e dados não mudam.
+   ============================================================ */
+const _reduzMov = matchMedia('(prefers-reduced-motion: reduce)');
+const _podeVT = () => 'startViewTransition' in document && !_reduzMov.matches;
+const _raiz = document.documentElement;
+_raiz.classList.toggle('vt-on', _podeVT());
+_reduzMov.addEventListener?.('change', () => _raiz.classList.toggle('vt-on', _podeVT()));
+
+/* some com fade e só então remove do DOM (sem atraso para o usuário: o elemento já é inerte) */
+function sairSuave(el, classe = 'saindo-suave') {
+  if (!el) return;
+  if (_reduzMov.matches) { el.remove(); return; }
+  el.classList.add(classe);
+  setTimeout(() => el.remove(), 200);
+}
+
+/* telas: cross-fade com deslocamento na direção da navegação (Dívidas → Geral → Lançamentos → Histórico → Metas → Perfil) */
+const _ORDEM_TELAS = ['view-dividas', 'view-geral', 'view-lancamentos', 'view-historico', 'view-metas', 'view-perfil'];
+let _vtAtual = null;
+const _ndVT = (nome, el) => el && el.style.setProperty('view-transition-name', nome);
+const _mostrarViewSemVT = mostrarView;
+mostrarView = function (id) {
+  const antigo = TODAS_AS_VIEWS.map(v => document.getElementById(v)).find(e => e && e.style.display === 'block');
+  if (!_podeVT() || !antigo || antigo.id === id) return _mostrarViewSemVT.apply(this, arguments);
+  _vtAtual?.skipTransition();                                   // navegação rápida: conclui a anterior antes de começar outra
+  const self = this, args = arguments;
+  _raiz.style.setProperty('--vt-x', Math.sign(_ORDEM_TELAS.indexOf(id) - _ORDEM_TELAS.indexOf(antigo.id)) || 1);
+  _ndVT('vt-tela', antigo);
+  const t = _vtAtual = document.startViewTransition(() => {
+    _ndVT('', antigo);
+    _mostrarViewSemVT.apply(self, args);
+    _ndVT('vt-tela', document.getElementById(id));
+  });
+  const fim = () => { _ndVT('', antigo); _ndVT('', document.getElementById(id)); if (_vtAtual === t) _vtAtual = null; };
+  t.finished.then(fim, fim);
+};
+
+/* login ↔ app: cross-fade só quando a tela realmente muda */
+[['showAppScreen', 'app-screen'], ['showAuthScreen', 'auth-screen']].forEach(([nome, alvo]) => {
+  const base = window[nome];
+  window[nome] = function () {
+    const self = this, args = arguments;
+    const jaVisivel = document.getElementById(alvo).classList.contains('show');
+    const algumaVisivel = document.querySelector('#auth-screen.show, #app-screen.show');
+    if (!_podeVT() || jaVisivel || !algumaVisivel) return base.apply(self, args);
+    _vtAtual?.skipTransition();
+    const t = _vtAtual = document.startViewTransition(() => { base.apply(self, args); });
+    const fim = () => { if (_vtAtual === t) _vtAtual = null; };
+    t.finished.then(fim, fim);
+  };
+});
+
+/* abas de dívidas: só quando a aba mudou (atualizar a mesma aba não anima) */
+let _abaVista = null;
+const _renderContentBase = renderContent;
+renderContent = function () {
+  const mudou = _abaVista !== null && _abaVista !== activeTabId;
+  _renderContentBase.apply(this, arguments);
+  _abaVista = activeTabId;
+  const c = document.getElementById('app-content');
+  if (mudou && c && !_reduzMov.matches) {
+    c.classList.remove('aba-troca'); void c.offsetWidth; c.classList.add('aba-troca');
+    setTimeout(() => c.classList.remove('aba-troca'), 400);
+  }
+};
 
 /* ── Início ── */
 checkSession();

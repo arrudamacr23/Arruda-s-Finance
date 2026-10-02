@@ -1780,7 +1780,7 @@ header {
   opacity: 0;
   visibility: hidden;
   transform: translateY(-8px);
-  transition: var(--tr-ui);
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out), visibility 0s linear var(--dur-fast);
   z-index: 300;
   display: flex;
   flex-direction: column;
@@ -2654,3 +2654,31 @@ input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color:
 /* parcelas: o lápis de editar cobria o início do nome do mês; o conteúdo desce para ficar abaixo dele */
 .parcela-card { padding-top: 30px; }
 .parcela-edit-btn { top: 6px; left: 6px; width: 22px; height: 22px; }
+
+
+/* ============================================================
+   TRANSIÇÕES ENTRE TELAS E ESTADOS (script.js · "TRANSIÇÕES")
+   ============================================================
+   • Telas: View Transitions API (quando o navegador tem e o movimento não está
+     reduzido): a tela antiga some em --dur-fast e a nova entra em --dur-base,
+     com 8–12px de deslocamento na direção da navegação. Cabeçalho e barra
+     inferior ficam parados. Sem suporte, vale o fade de entrada de antes.
+   • Abas de dívidas: o conteúdo novo entra com fade + 6px.
+   • Painéis e sobreposições: saem com fade em vez de sumir. */
+html.vt-on .view-fade-in { animation: none; }
+::view-transition-group(root) { animation-duration: var(--dur-base); }
+::view-transition-group(vt-tela) { animation: none; }
+::view-transition-old(vt-tela) { animation: vtOut var(--dur-fast) cubic-bezier(.4,0,1,1) both; }
+::view-transition-new(vt-tela) { animation: vtIn var(--dur-base) var(--ease-out) both; }
+@keyframes vtOut { to { opacity: 0; transform: translateX(calc(var(--vt-x, 0) * -8px)); } }
+@keyframes vtIn { from { opacity: 0; transform: translateX(calc(var(--vt-x, 0) * 12px)); } }
+.aba-troca { animation: abaIn var(--dur-fast) var(--ease-out) both; }
+@keyframes abaIn { from { opacity: 0; transform: translateY(6px); } }
+.ob-overlay { animation: fundoIn var(--dur-base) ease-out both; }
+@keyframes fundoIn { from { opacity: 0; } }
+.ob-overlay.ob-saindo, .saindo-suave { pointer-events: none; animation: saidaSuave var(--dur-fast) cubic-bezier(.4,0,1,1) both; }
+@keyframes saidaSuave { to { opacity: 0; transform: translateY(-4px); } }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+  .aba-troca, .ob-overlay, .ob-overlay.ob-saindo, .saindo-suave { animation: none; }
+}
